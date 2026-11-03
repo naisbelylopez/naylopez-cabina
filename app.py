@@ -302,59 +302,98 @@ elif menu == "Clientes y Ficha Clínica":
           " visualizar la tabla aquí."
       )
 elif menu == "Inventario / Productos":
-  st.title("Control de Inventario y Activos de Cabina")
-  st.markdown("Administra tus productos, cosméticos, insumos y equipos estéticos.")
+  st.title("Control de Inventario y Costos de Cabina")
+  st.markdown(
+      "Gestiona tus insumos descartables (unidades) y tus cosméticos"
+      " profesionales (mililitros/gramos)."
+  )
 
-  tab1, tab2 = st.tabs(["Registrar Producto / Insumo", "Stock Actual"])
+  tab1, tab2 = st.tabs(["Registrar Producto / Insumo", "Stock y Costos Actuales"])
 
   with tab1:
-    st.subheader("📦 Agregar Insumo, Cosmético o Equipo")
+    st.subheader("📦 Agregar Producto o Insumo a la Cabina")
 
     col1, col2 = st.columns(2)
     with col1:
-      prod_nombre = st.text_input("Nombre del Producto / Activo / Equipo")
-      prod_categoria = st.selectbox(
-          "Categoría",
+      prod_nombre = st.text_input(
+          "Nombre del Producto / Activo (Ej: Limpiador, Gasa, Ácido Mandélico)"
+      )
+      tipo_medida = st.selectbox(
+          "Tipo de Inventario",
           [
-              "Cosmética / Serums / Ácidos",
-              "Insumos Descartables (Gasas, Guantes, etc.)",
-              "Aparatología / Equipos",
-              "Apoyo Domiciliario",
-              "Otro",
+              "Líquido / En Crema (Mililitros - ml)",
+              "En Polvo / Sólido (Gramos - g)",
+              "Unidades (Descartables / Venta)",
           ],
       )
 
     with col2:
-      prod_stock = st.number_input("Cantidad Disponible", min_value=0, step=1, value=1)
-      prod_costo = st.text_input("Costo Unitario / Notas de Proveedor")
+      precio_compra = st.number_input(
+          "Costo Total de Compra ($)", min_value=0.0, step=0.50, value=25.0
+      )
+      
+      # Dependiendo del tipo, pedimos la cantidad total del envase o paquete
+      if "ml" in tipo_medida or "g" in tipo_medida:
+        cantidad_total = st.number_input(
+            "Contenido Total del Envase (ml o g)",
+            min_value=1.0,
+            step=1.0,
+            value=250.0,
+        )
+      else:
+        cantidad_total = st.number_input(
+            "Cantidad de Unidades en el Paquete",
+            min_value=1,
+            step=1,
+            value=100,
+        )
 
-    prod_observacion = st.text_area("Detalles o especificaciones del producto")
+    observaciones_prod = st.text_area(
+        "Notas o marca del producto (Ej: Uso exclusivo para Hydra Glow Detox)"
+    )
 
-    if st.button("Guardar Producto en Inventario"):
+    if st.button("Guardar e Calcular Costo Unitario"):
       if prod_nombre:
+        # Calculamos el costo por ml, gramo o unidad automáticamente
+        if cantidad_total > 0:
+          costo_unitario = precio_compra / cantidad_total
+        else:
+          costo_unitario = 0.0
+
+        # Guardamos en la hoja de inventario
         ws_inventario.append_row([
             str(datetime.now().strftime("%Y-%m-%d %H:%M")),
             prod_nombre,
-            prod_categoria,
-            int(prod_stock),
-            prod_costo,
-            prod_observacion,
+            tipo_medida,
+            float(precio_compra),
+            float(cantidad_total),
+            round(costo_unitario, 4),  # Costo exacto por ml, g o unidad
+            observaciones_prod,
         ])
-        st.success(f"¡Producto '{prod_nombre}' registrado con éxito en Google Sheets!")
+        st.success(
+            f"¡'{prod_nombre}' registrado con éxito! El costo calculado es de"
+            f" ${costo_unitario:.4f} por {'ml/g' if 'ml' in tipo_medida or 'g' in tipo_medida else 'unidad'}."
+        )
       else:
         st.warning("Por favor ingresa al menos el nombre del producto.")
 
   with tab2:
-    st.subheader("📋 Stock Actual en Cabina")
+    st.subheader("📋 Stock Actual y Costos por Unidad/Mililitro")
     try:
       data_inv = ws_inventario.get_all_records()
       if data_inv and len(data_inv) > 0:
         df_inv = pd.DataFrame(data_inv)
         st.dataframe(df_inv, use_container_width=True)
       else:
-        st.info("📦 El inventario está vacío actualmente. Agrega tu primer producto en la pestaña de al lado.")
+        st.info(
+            "📦 El inventario está vacío. Agrega tu primer producto en la pestaña"
+            " de al lado."
+        )
     except Exception:
-      st.info("📦 Agrega tu primer producto para visualizar la tabla de stock.")
+      st.info(
+          "📦 Agrega tu primer producto para visualizar la tabla de costos y"
+          " stock."
+      )
 
 elif menu == "Finanzas / Caja":
   st.title("Control Financiero y Movimientos")
