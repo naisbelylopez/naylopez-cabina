@@ -237,7 +237,6 @@ elif menu == "Clientes y Ficha Clínica":
 
     if st.button("Guardar Ficha Clínica Completa"):
       if nombre:
-        # Recopilamos en una lista los tipos de piel seleccionados
         tipos_seleccionados = []
         if tp_eudermica:
           tipos_seleccionados.append("Eudérmica")
@@ -288,20 +287,20 @@ elif menu == "Clientes y Ficha Clínica":
     st.subheader("📂 Base de Datos de Pacientes y Fichas Clínicas")
     try:
       data_clientes = ws_clientes.get_all_records()
+      # Validamos si hay datos reales cargados
       if data_clientes and len(data_clientes) > 0:
         df_clientes = pd.DataFrame(data_clientes)
         st.dataframe(df_clientes, use_container_width=True)
       else:
         st.info(
-            "Aún no hay pacientes registradas. ¡Crea la primera en la pestaña"
-            " de al lado!"
+            "📋 Aún no hay pacientes registradas en la hoja. Ve a la pestaña"
+            " 'Registrar Nueva Paciente' para agregar la primera."
         )
-    except Exception as e:
+    except Exception:
       st.info(
-          "Registra tu primera paciente para visualizar la tabla de historias"
-          " clínicas."
+          "📋 Tu base de datos está lista. Agrega tu primera paciente para"
+          " visualizar la tabla aquí."
       )
-
 elif menu == "Inventario / Productos":
   st.title("Control de Inventario y Activos de Cabina")
   st.info("Módulo en espera.")
