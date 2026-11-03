@@ -303,7 +303,58 @@ elif menu == "Clientes y Ficha Clínica":
       )
 elif menu == "Inventario / Productos":
   st.title("Control de Inventario y Activos de Cabina")
-  st.info("Módulo en espera.")
+  st.markdown("Administra tus productos, cosméticos, insumos y equipos estéticos.")
+
+  tab1, tab2 = st.tabs(["Registrar Producto / Insumo", "Stock Actual"])
+
+  with tab1:
+    st.subheader("📦 Agregar Insumo, Cosmético o Equipo")
+
+    col1, col2 = st.columns(2)
+    with col1:
+      prod_nombre = st.text_input("Nombre del Producto / Activo / Equipo")
+      prod_categoria = st.selectbox(
+          "Categoría",
+          [
+              "Cosmética / Serums / Ácidos",
+              "Insumos Descartables (Gasas, Guantes, etc.)",
+              "Aparatología / Equipos",
+              "Apoyo Domiciliario",
+              "Otro",
+          ],
+      )
+
+    with col2:
+      prod_stock = st.number_input("Cantidad Disponible", min_value=0, step=1, value=1)
+      prod_costo = st.text_input("Costo Unitario / Notas de Proveedor")
+
+    prod_observacion = st.text_area("Detalles o especificaciones del producto")
+
+    if st.button("Guardar Producto en Inventario"):
+      if prod_nombre:
+        ws_inventario.append_row([
+            str(datetime.now().strftime("%Y-%m-%d %H:%M")),
+            prod_nombre,
+            prod_categoria,
+            int(prod_stock),
+            prod_costo,
+            prod_observacion,
+        ])
+        st.success(f"¡Producto '{prod_nombre}' registrado con éxito en Google Sheets!")
+      else:
+        st.warning("Por favor ingresa al menos el nombre del producto.")
+
+  with tab2:
+    st.subheader("📋 Stock Actual en Cabina")
+    try:
+      data_inv = ws_inventario.get_all_records()
+      if data_inv and len(data_inv) > 0:
+        df_inv = pd.DataFrame(data_inv)
+        st.dataframe(df_inv, use_container_width=True)
+      else:
+        st.info("📦 El inventario está vacío actualmente. Agrega tu primer producto en la pestaña de al lado.")
+    except Exception:
+      st.info("📦 Agrega tu primer producto para visualizar la tabla de stock.")
 
 elif menu == "Finanzas / Caja":
   st.title("Control Financiero y Movimientos")
