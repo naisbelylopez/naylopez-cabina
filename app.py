@@ -1,209 +1,508 @@
+import sqlite3
 from datetime import datetime
-import gspread
-from google.oauth2.service_account import Credentials
 import pandas as pd
 import streamlit as st
 
-# Configuración de la página
+# ==========================================
+# CONFIGURACIÓN DE LA BASE DE DATOS SQLITE
+# ==========================================
+DB_NAME = "cabina_estetica.db"
+
+
+def init_db():
+  conn = sqlite3.connect(DB_NAME)
+  cursor = conn.cursor()
+
+  # Tabla de Clientes y Ficha Clínica
+  cursor.execute("""
+        CREATE TABLE IF NOT EXISTS clientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre_completo TEXT NOT NULL,
+            cedula TEXT UNIQUE NOT NULL,
+            fecha_nacimiento TEXT,
+            telefono TEXT,
+            email TEXT,
+            ocupacion TEXT,
+            tipo_piel TEXT,
+            fototipo TEXT,
+            alergias TEXT,
+            embarazo_lactancia TEXT,
+            antecedentes_medicos TEXT,
+            fecha_registro TEXT
+        )
+    """)
+
+  # Tabla de Citas / Agenda
+  cursor.execute("""
+        CREATE TABLE IF NOT EXISTS citas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cedula_cliente TEXT,
+            servicio TEXT,
+            fecha TEXT,
+            hora TEXT,
+            estado TEXT,
+            notas TEXT,
+            FOREIGN KEY(cedula_cliente) REFERENCES clientes(cedula)
+        )
+    """)
+
+  # Tabla de Inventario
+  cursor.execute("""
+        CREATE TABLE IF NOT EXISTS inventario (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre_producto TEXT NOT NULL,
+            categoria TEXT,
+            stock_actual REAL,
+            unidad_medida TEXT,
+            stock_minimo REAL,
+            costo_unitario REAL,
+            vencimiento TEXT
+        )
+    """)
+
+  # Tabla de Finanzas / Caja
+  cursor.execute("""
+        CREATE TABLE IF NOT EXISTS transacciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora TEXT,
+            cedula_cliente TEXT,
+            tipo_concepto TEXT,
+            descripcion TEXT,
+            monto_total REAL,
+            metodo_pago TEXT
+        )
+    """)
+
+  conn.commit()
+  conn.close()
+
+
+init_db()
+
+# ==========================================
+# INTERFAZ DE USUARIO CON STREAMLIT
+# ==========================================
 st.set_page_config(
-    page_title="Nay López Skincare", page_icon="✨", layout="wide"
+    page_title="Nay López Skincare - Sistema de Cabina",
+    page_icon="✨",
+    layout="wide",
 )
 
-
-# ============================================
-# CONEXIÓN SEGURA CON GOOGLE SHEETS
-# ============================================
-def conectar_google_sheets():
-  scope = [
-      "https://www.googleapis.com/auth/spreadsheets",
-      "https://www.googleapis.com/auth/drive",
-  ]
-  creds_dict = dict(st.secrets["gcp_service_account"])
-  creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-  client = gspread.authorize(creds)
-  sheet = client.open("NayLopez_Cabina_DB").sheet1
-  return sheet
-
-
-# Intentamos conectar y asegurar las pestañas necesarias
-try:
-  sh = conectar_google_sheets().spreadsheet
-
-  # Verificamos y creamos automáticamente las pestañas si no existen
-  try:
-    ws_clientes = sh.worksheet("Clientes")
-  except:
-    ws_clientes = sh.add_worksheet(title="Clientes", rows="100", cols="20")
-
-  try:
-    ws_inventario = sh.worksheet("Inventario")
-  except:
-    ws_inventario = sh.add_worksheet(title="Inventario", rows="100", cols="20")
-
-  try:
-    ws_finanzas = sh.worksheet("Finanzas")
-  except:
-    ws_finanzas = sh.add_worksheet(title="Finanzas", rows="100", cols="20")
-
-except Exception as e:
-  st.error(
-      f"Error al conectar con Google Sheets. Verifica tus credenciales o el"
-      f" nombre de la hoja: {e}"
-  )
-  st.stop()
-
-# ============================================
-# INTERFAZ DE NAVEGACIÓN
-# ============================================
 st.sidebar.title("✨ Nay López Skincare")
-st.sidebar.markdown("Sistema en la Nube (Google Sheets)")
-st.sidebar.markdown("Navegación")
+st.sidebar.subheader("Sistema Operativo de Cabina")
 
 menu = st.sidebar.selectbox(
-    "Selecciona una opción",
-    [
-        "Inicio / Dashboard",
-        "Clientes y Ficha Clínica",
-        "Inventario / Productos",
-        "Finanzas / Caja",
-        "Citas y Agenda",
-    ],
+    "Navegación", [
+        "🏠 Inicio / Dashboard",
+        "👥 Clientes y Ficha Clínica",
+        "📅 Agenda y Citas",
+        "📦 Inventario de Insumos",
+        "💰 Caja y Finanzas",
+    ]
 )
 
-if menu == "Inicio / Dashboard":
-  st.title("Panel de Control - Nay López Skincare")
-  st.info(
-      "¡Bienvenida a tu sistema de gestión estética! Desde aquí puedes"
-      " administrar tus pacientes, inventario y finanzas en tiempo real."
+# ------------------------------------------
+# 1. DASHBOARD INICIAL
+# ------------------------------------------
+if menu == "🏠 Inicio / Dashboard":
+  st.title("Panel de Control General")
+  st.markdown(
+      "Bienvenida a tu sistema operativo de cabina. Aquí tienes un resumen"
+      " rápido del estado de tu estudio."
   )
 
-elif menu == "Clientes y Ficha Clínica":
+  conn = sqlite3.connect(DB_NAME)
+  df_clientes = pd.read_sql_query("SELECT * FROM clientes", conn)
+  df_citas = pd.read_sql_query(
+      "SELECT * FROM citas WHERE estado = 'Agendada' OR estado = 'Confirmada'",
+      conn,
+  )
+  df_inventario = pd.read_sql_query("SELECT * FROM inventario", conn)
+  conn.close()
+
+  col1, col2, col3 = st.columns(3)
+  with col1:
+    st.metric("Total Pacientes Registrados", len(df_clientes))
+  with col2:
+    st.metric("Citas Pendientes", len(df_citas))
+  with col3:
+    if not df_inventario.empty:
+      criticos = len(
+          df_inventario[
+              df_inventario["stock_actual"] <= df_inventario["stock_minimo"]
+          ]
+      )
+      st.metric("Insumos en Stock Crítico ⚠️", criticos)
+    else:
+      st.metric("Insumos en Stock Crítico ⚠️", 0)
+
+  st.divider()
+  st.subheader("⚠️ Alertas Rápidas de Inventario")
+  if not df_inventario.empty:
+    bajos = df_inventario[
+        df_inventario["stock_actual"] <= df_inventario["stock_minimo"]
+    ]
+    if not bajos.empty:
+      st.warning(
+          "Los siguientes productos están por debajo del stock mínimo recomendado:"
+      )
+      st.dataframe(
+          bajos[[
+              "nombre_producto",
+              "categoria",
+              "stock_actual",
+              "unidad_medida",
+              "stock_minimo",
+          ]]
+      )
+    else:
+      st.success("¡Todo el inventario se encuentra en niveles óptimos!")
+  else:
+    st.info(
+        "No hay productos registrados en el inventario todavía. Ve al módulo"
+        " correspondiente para agregarlos."
+    )
+
+# ------------------------------------------
+# 2. CLIENTES Y FICHA CLÍNICA
+# ------------------------------------------
+elif menu == "👥 Clientes y Ficha Clínica":
   st.title("Gestión de Pacientes y Ficha Estética")
 
   tab1, tab2 = st.tabs(["Registrar Nuevo Paciente", "Consultar Fichas"])
 
   with tab1:
-    st.subheader("Registro de Paciente")
-    nombre = st.text_input("Nombre y Apellido")
-    telefono = st.text_input("Teléfono")
-    email = st.text_input("Correo Electrónico")
-    observaciones = st.text_area("Observaciones / Alergias / Tratamientos")
-
-    if st.button("Guardar Paciente"):
-      if nombre:
-        ws_clientes.append_row(
-            [nombre, telefono, email, observaciones, str(datetime.now())]
+    st.subheader("Nueva Ficha Clínica")
+    with st.form("form_cliente"):
+      col1, col2 = st.columns(2)
+      with col1:
+        nombre = st.text_input("Nombre Completo")
+        cedula = st.text_input("Cédula de Identidad (Única)")
+        fnac = st.date_input("Fecha de Nacimiento")
+        telefono = st.text_input("Teléfono / WhatsApp")
+      with col2:
+        email = st.text_input("Correo Electrónico")
+        ocupacion = st.text_input("Ocupación")
+        tipo_piel = st.selectbox(
+            "Tipo de Piel",
+            [
+                "Eudérmica",
+                "Seborreica",
+                "Alípica",
+                "Deshidratada",
+                "Mixta",
+            ],
         )
-        st.success(f"¡Paciente {nombre} registrada con éxito en Google Sheets!")
-      else:
-        st.warning("Por favor ingresa al menos el nombre del paciente.")
+        fototipo = st.selectbox(
+            "Fototipo Cutáneo (Fitzpatrick)",
+            ["Tipo I", "Tipo II", "Tipo III", "Tipo IV", "Tipo V", "Tipo VI"],
+        )
+
+      st.markdown("---")
+      st.subheader("Anamnesis y Antecedentes")
+      alergias = st.text_area("Alergias Conocidas (Fármacos, cosméticos, etc.)")
+      embarazo = st.selectbox(
+          "¿Está embarazada o en periodo de lactancia?", ["No", "Sí"]
+      )
+      antecedentes = st.text_area(
+          "Medicamentos actuales / Uso de retinoides en casa"
+      )
+
+      submitted = st.form_submit_button("Guardar Paciente y Ficha")
+      if submitted:
+        if nombre and cedula:
+          try:
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                            INSERT INTO clientes (nombre_completo, cedula, fecha_nacimiento, telefono, email, ocupacion, tipo_piel, fototipo, alergias, embarazo_lactancia, antecedentes_medicos, fecha_registro)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                (
+                    nombre,
+                    cedula,
+                    str(fnac),
+                    telefono,
+                    email,
+                    ocupacion,
+                    tipo_piel,
+                    fototipo,
+                    alergias,
+                    embarazo,
+                    antecedentes,
+                    str(datetime.now()),
+                ),
+            )
+            conn.commit()
+            conn.close()
+            st.success(
+                f"¡Paciente {nombre} registrada con éxito en el sistema!"
+            )
+          except sqlite3.IntegrityError:
+            st.error(
+                "Error: Ya existe una paciente registrada con la cédula"
+                f" {cedula}."
+            )
+        else:
+          st.error("Por favor completa al menos el Nombre y la Cédula.")
 
   with tab2:
-    st.subheader("Lista de Pacientes Registradas")
-    try:
-      data = ws_clientes.get_all_records()
-      if data:
-        df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True)
-      else:
-        st.info("Aún no hay pacientes registradas en la hoja.")
-    except Exception as e:
-      st.info("Registra tu primera paciente para visualizar la tabla.")
+    st.subheader("Base de Datos de Pacientes")
+    conn = sqlite3.connect(DB_NAME)
+    df_c = pd.read_sql_query("SELECT * FROM clientes", conn)
+    conn.close()
+    if not df_c.empty:
+      busqueda = st.text_input("Buscar por Nombre o Cédula")
+      if busqueda:
+        df_c = df_c[
+            df_c["nombre_completo"].str.contains(busqueda, case=False, na=False)
+            | df_c["cedula"].str.contains(busqueda, case=False, na=False)
+        ]
+      st.dataframe(df_c)
+    else:
+      st.info("No hay pacientes registrados todavía.")
 
-elif menu == "Inventario / Productos":
-  st.title("Control de Inventario y Activos de Cabina")
+# ------------------------------------------
+# 3. AGENDA Y CITAS
+# ------------------------------------------
+elif menu == "📅 Agenda y Citas":
+  st.title("Agenda y Control de Citas")
 
-  tab1, tab2 = st.tabs(["Registrar Producto / Insumo", "Ver Inventario"])
+  col_a, col_b = st.columns(2)
+
+  with col_a:
+    st.subheader("Agendar Nueva Cita")
+    conn = sqlite3.connect(DB_NAME)
+    df_cli = pd.read_sql_query(
+        "SELECT cedula, nombre_completo FROM clientes", conn
+    )
+    conn.close()
+
+    if not df_cli.empty:
+      cliente_dict = dict(
+          zip(df_cli["nombre_completo"], df_cli["cedula"], strict=False)
+      )
+      selected_client_name = st.selectbox(
+          "Seleccionar Paciente", list(cliente_dict.keys())
+      )
+      cedula_asociada = cliente_dict[selected_client_name]
+
+      servicio = st.selectbox(
+          "Servicio / Protocolo",
+          [
+              "Hydra Glow Detox",
+              "Limpieza Profunda + Espátula",
+              "Peeling Ácido Mandélico 10%",
+              "Dermapen con PDRN",
+              "Radiofrecuencia Corporal / Maderoterapia",
+          ],
+      )
+      fecha_cita = st.date_input("Fecha de la Cita")
+      hora_cita = st.time_input("Hora de la Cita")
+      estado_cita = st.selectbox(
+          "Estado", ["Agendada", "Confirmada", "Completada", "Cancelada"]
+      )
+      notas_cita = st.text_area("Notas internas")
+
+      if st.button("Programar Cita"):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+                    INSERT INTO citas (cedula_cliente, servicio, fecha, hora, estado, notas)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """,
+            (
+                cedula_asociada,
+                servicio,
+                str(fecha_cita),
+                str(hora_cita),
+                estado_cita,
+                notas_cita,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        st.success("¡Cita agendada correctamente!")
+    else:
+      st.warning(
+          "Primero debes registrar al menos una paciente en la sección de"
+          " Clientes."
+      )
+
+  with col_b:
+    st.subheader("Calendario de Citas Registradas")
+    conn = sqlite3.connect(DB_NAME)
+    df_citas = pd.read_sql_query(
+        """
+            SELECT c.nombre_completo, t.servicio, t.fecha, t.hora, t.estado 
+            FROM citas t 
+            JOIN clientes c ON t.cedula_cliente = c.cedula
+        """,
+        conn,
+    )
+    conn.close()
+    if not df_citas.empty:
+      st.dataframe(df_citas)
+    else:
+      st.info("No hay citas programadas.")
+
+# ------------------------------------------
+# 4. INVENTARIO DE INSUMOS
+# ------------------------------------------
+elif menu == "📦 Inventario de Insumos":
+  st.title("Control de Inventario y Principios Activos")
+
+  tab1, tab2 = st.tabs(["Registrar / Agregar Producto", "Stock Actual"])
 
   with tab1:
-    st.subheader("Agregar Insumo o Producto")
-    prod_nombre = st.text_input("Nombre del Producto / Activo")
-    prod_categoria = st.selectbox(
-        "Categoría",
-        [
-            "Cosmética / Serum",
-            "Insumo Descartable",
-            "Aparatología / Equipo",
-            "Otro",
-        ],
-    )
-    prod_stock = st.number_input(
-        "Cantidad Disponible", min_value=0, step=1, value=1
-    )
-    prod_costo = st.text_input("Costo Unitario / Notas")
+    with st.form("form_inventario"):
+      nombre_prod = st.text_input("Nombre del Insumo / Producto")
+      cat_prod = st.selectbox(
+          "Categoría",
+          [
+              "Ácidos / Peelings",
+              "Ampollas / Serums",
+              "Mascarillas",
+              "Descartables",
+              "Aparatología",
+          ],
+      )
+      stock_act = st.number_input(
+          "Stock Actual", min_value=0.0, format="%.2f"
+      )
+      unidad = st.selectbox(
+          "Unidad de Medida", ["Unidades (un)", "Mililitros (ml)", "Gramos (g)"]
+      )
+      stock_min = st.number_input(
+          "Stock Mínimo de Alerta", min_value=0.0, format="%.2f"
+      )
+      costo = st.number_input(
+          "Costo Unitario ($)", min_value=0.0, format="%.2f"
+      )
+      vencimiento = st.date_input("Fecha de Caducidad (Opcional)")
 
-    if st.button("Guardar en Inventario"):
-      if prod_nombre:
-        ws_inventario.append_row([
-            prod_nombre,
-            prod_categoria,
-            int(prod_stock),
-            prod_costo,
-            str(datetime.now()),
-        ])
-        st.success(f"¡Producto '{prod_nombre}' registrado en el inventario!")
-      else:
-        st.warning("Por favor ingresa el nombre del producto.")
-
-  with tab2:
-    st.subheader("Stock Actual en Cabina")
-    try:
-      data_inv = ws_inventario.get_all_records()
-      if data_inv:
-        df_inv = pd.DataFrame(data_inv)
-        st.dataframe(df_inv, use_container_width=True)
-      else:
-        st.info("El inventario está vacío actualmente.")
-    except Exception as e:
-      st.info("Agrega tu primer producto para visualizar la tabla.")
-
-elif menu == "Finanzas / Caja":
-  st.title("Control Financiero y Movimientos")
-
-  tab1, tab2 = st.tabs(["Registrar Movimiento", "Historial Financiero"])
-
-  with tab1:
-    st.subheader("Registrar Ingreso o Gasto")
-    tipo_mov = st.selectbox("Tipo de Movimiento", ["Ingreso", "Gasto"])
-    concepto = st.text_input(
-        "Concepto (Ej: Servicio Hydra Glow, Compra de Gasas, etc.)"
-    )
-    monto = st.number_input(
-        "Monto ($ o Moneda Local)", min_value=0.0, step=0.50
-    )
-    metodo_pago = st.selectbox(
-        "Método de Pago", ["Efectivo", "Binance USDT", "Zinli", "BNC / Pago Móvil", "Otro"]
-    )
-
-    if st.button("Guardar Movimiento"):
-      if concepto and monto > 0:
-        ws_finanzas.append_row([
-            tipo_mov,
-            concepto,
-            float(monto),
-            metodo_pago,
-            str(datetime.now()),
-        ])
-        st.success("¡Movimiento financiero registrado con éxito!")
-      else:
-        st.warning("Completa el concepto y un monto válido.")
+      submitted_inv = st.form_submit_button("Guardar en Inventario")
+      if submitted_inv:
+        if nombre_prod:
+          conn = sqlite3.connect(DB_NAME)
+          cursor = conn.cursor()
+          cursor.execute(
+              """
+                        INSERT INTO inventario (nombre_producto, categoria, stock_actual, unidad_medida, stock_minimo, costo_unitario, vencimiento)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+              (
+                  nombre_prod,
+                  cat_prod,
+                  stock_act,
+                  unidad,
+                  stock_min,
+                  costo,
+                  str(vencimiento),
+              ),
+          )
+          conn.commit()
+          conn.close()
+          st.success(f"Producto '{nombre_prod}' registrado con éxito.")
+        else:
+          st.error("El nombre del producto es obligatorio.")
 
   with tab2:
-    st.subheader("Resumen de Ingresos y Gastos")
-    try:
-      data_fin = ws_finanzas.get_all_records()
-      if data_fin:
-        df_fin = pd.DataFrame(data_fin)
-        st.dataframe(df_fin, use_container_width=True)
-      else:
-        st.info("No hay movimientos financieros registrados todavía.")
-    except Exception as e:
-      st.info("Registra un movimiento para ver la tabla financiera.")
+    conn = sqlite3.connect(DB_NAME)
+    df_inv = pd.read_sql_query("SELECT * FROM inventario", conn)
+    conn.close()
+    if not df_inv.empty:
+      st.dataframe(df_inv)
+    else:
+      st.info("El inventario está vacío.")
 
-elif menu == "Citas y Agenda":
-  st.title("Agenda de Citas - Cabina Estética")
-  st.write(
-      "Módulo listo para agendar tus pacientes y organizar tus horarios de"
-      " atención en GIA SHOP o tu estudio."
-  )
-  st.info("Próximamente calendario interactivo de citas.")
+# ------------------------------------------
+# 5. CAJA Y FINANZAS
+# ------------------------------------------
+elif menu == "💰 Caja y Finanzas":
+  st.title("Control Financiero y Caja")
+
+  col1, col2 = st.columns(2)
+
+  with col1:
+    st.subheader("Registrar Ingreso / Pago")
+    conn = sqlite3.connect(DB_NAME)
+    df_cli = pd.read_sql_query(
+        "SELECT cedula, nombre_completo FROM clientes", conn
+    )
+    conn.close()
+
+    if not df_cli.empty:
+      cliente_dict = dict(
+          zip(df_cli["nombre_completo"], df_cli["cedula"], strict=False)
+      )
+      client_name = st.selectbox(
+          "Paciente", list(cliente_dict.keys()), key="pago_cliente"
+      )
+      cedula_pago = cliente_dict[client_name]
+
+      concepto = st.selectbox(
+          "Concepto", ["Servicio de Cabina", "Venta de Producto / Home Care"]
+      )
+      descripcion_pago = st.text_input("Detalle (Ej. Hydra Glow Detox)")
+      monto = st.number_input("Monto Total ($)", min_value=0.0, format="%.2f")
+      metodo = st.selectbox(
+          "Método de Pago",
+          [
+              "Efectivo Divisas",
+              "Pago Móvil (VES)",
+              "USDT / Binance Pay",
+              "Efectivo Bolívares",
+          ],
+      )
+
+      if st.button("Registrar Transacción"):
+        if monto > 0:
+          conn = sqlite3.connect(DB_NAME)
+          cursor = conn.cursor()
+          cursor.execute(
+              """
+                        INSERT INTO transacciones (fecha_hora, cedula_cliente, tipo_concepto, descripcion, monto_total, metodo_pago)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+              (
+                  str(datetime.now()),
+                  cedula_pago,
+                  concepto,
+                  descripcion_pago,
+                  monto,
+                  metodo,
+              ),
+          )
+          conn.commit()
+          conn.close()
+          st.success("¡Transacción registrada y sumada a caja exitosamente!")
+        else:
+          st.error("El monto debe ser mayor a cero.")
+    else:
+      st.warning("Registra una paciente antes de procesar transacciones.")
+
+  with col2:
+    st.subheader("Resumen y Cierre de Caja")
+    conn = sqlite3.connect(DB_NAME)
+    df_trans = pd.read_sql_query("SELECT * FROM transacciones", conn)
+    conn.close()
+
+    if not df_trans.empty:
+      st.dataframe(df_trans[[
+          "fecha_hora",
+          "tipo_concepto",
+          "descripcion",
+          "monto_total",
+          "metodo_pago",
+      ]])
+      total_ingresos = df_trans["monto_total"].sum()
+      st.metric("Ingresos Totales Registrados ($)", f"${total_ingresos:.2f}")
+
+      st.markdown("### Desglose por Método de Pago")
+      desglose = df_trans.groupby("metodo_pago")["monto_total"].sum()
+      st.write(desglose)
+    else:
+      st.info("No hay transacciones registradas.")
