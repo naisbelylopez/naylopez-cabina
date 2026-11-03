@@ -411,9 +411,81 @@ elif menu == "Inventario / Productos":
       )
 
 elif menu == "Finanzas / Caja":
-  st.title("Control Financiero y Movimientos")
-  st.info("Módulo en espera.")
+  st.title("Control Financiero y Caja")
+  st.markdown("Registra tus ingresos por tratamientos y controla los gastos de tu cabina.")
 
+  tab1, tab2 = st.tabs(["Registrar Movimiento", "Historial y Resumen"])
+
+  with tab1:
+    st.subheader("💵 Registrar Ingreso o Gasto")
+    st.info("💡 El formulario se limpiará automáticamente al guardar para agilizar tus registros.")
+
+    with st.form("form_finanzas", clear_on_submit=True):
+      col1, col2 = st.columns(2)
+      with col1:
+        tipo_mov = st.selectbox("Tipo de Movimiento", ["Ingreso", "Gasto"])
+        concepto = st.text_input("Concepto (Ej: Limpieza facial Hydra Glow, Compra de gasas, etc.)")
+        monto = st.number_input("Monto ($)", min_value=0.0, step=0.50, value=10.0)
+
+      with col2:
+        metodo_pago = st.selectbox(
+            "Método de Pago", 
+            ["Efectivo", "Binance USDT", "Zinli", "BNC / Pago Móvil", "Otro"]
+        )
+        categoria_fin = st.selectbox(
+            "Categoría",
+            [
+                "Servicio Estético / Tratamiento",
+                "Venta de Producto Domiciliario",
+                "Compra de Insumos / Cosméticos",
+                "Servicios / Alquiler / Operativo",
+                "Otro"
+            ]
+        )
+
+      notas_fin = st.text_area("Notas adicionales (Opcional)")
+
+      submit_fin = st.form_submit_button("Guardar Movimiento en Caja")
+
+      if submit_fin:
+        if concepto and monto > 0:
+          ws_finanzas.append_row([
+              str(datetime.now().strftime("%Y-%m-%d %H:%M")),
+              tipo_mov,
+              concepto,
+              float(monto),
+              metodo_pago,
+              categoria_fin,
+              notas_fin
+          ])
+          st.success(f"¡Movimiento de tipo '{tipo_mov}' registrado con éxito en Google Sheets!")
+        else:
+          st.warning("Por favor completa el concepto y asegúrate de colocar un monto válido.")
+
+  with tab2:
+    st.subheader("📊 Historial de Movimientos y Balance")
+    try:
+      data_fin = ws_finanzas.get_all_records()
+      if data_fin and len(data_fin) > 0:
+        df_fin = pd.DataFrame(data_fin)
+        
+        # Mostramos métricas rápidas de ingresos vs gastos si las columnas existen
+        if "Tipo" in df_fin.columns and "Monto" in df_fin.columns:
+          ingresos_df = df_fin[df_fin["Tipo"] == "Ingreso"]["Monto"].astype(float).sum()
+          gastos_df = df_fin[df_fin["Tipo"] == "Gasto"]["Monto"].astype(float).sum()
+          balance_df = ingresos_df - gastos_df
+
+          col_m1, col_m2, col_m3 = st.columns(3)
+          col_m1.metric("💰 Total Ingresos", f"${ingresos_df:.2f}")
+          col_m2.metric("📉 Total Gastos", f"${gastos_df:.2f}")
+          col_m3.metric("✨ Balance Neto", f"${balance_df:.2f}")
+          st.divider()
+
+        st.dataframe(df_fin, use_container_width=True)
+      else:
+        st.info("📂 Aún no hay movimientos financieros registrados. ¡Agrega el primero en la pestaña de al lado!")
+    except Exception:
+      st.info("📂 Registra tu primer movimiento para visualizar la tabla y el balance financiero.")
 elif menu == "Citas y Agenda":
   st.title("Agenda de Citas - Cabina Estética")
   st.info("Módulo en espera.")
