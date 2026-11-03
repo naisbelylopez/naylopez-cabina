@@ -1,6 +1,6 @@
 from datetime import datetime
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 import pandas as pd
 import streamlit as st
 
@@ -11,16 +11,16 @@ import streamlit as st
 def conectar_google_sheets():
   # Definimos el alcance (scope) para Google Sheets y Drive
   scope = [
-      "https://spreadsheets.google.com/feeds",
+      "https://www.googleapis.com/auth/spreadsheets",
       "https://www.googleapis.com/auth/drive",
   ]
 
-  # Convertimos los secretos seguros de Streamlit a un diccionario utilizable
+  # Cargamos las credenciales de forma segura y directa con google-auth
   creds_dict = dict(st.secrets["gcp_service_account"])
-  creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+  creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
   client = gspread.authorize(creds)
 
-  # Abre tu hoja de Google Sheets (asegúrate de que se llama 'NayLopez_Cabina_DB')
+  # Abre tu hoja de Google Sheets
   sheet = client.open("NayLopez_Cabina_DB").sheet1
   return sheet
 
