@@ -69,23 +69,41 @@ def conectar_google_sheets():
 
 try:
   sh = conectar_google_sheets().spreadsheet
-  ws_clientes = sh.worksheet("Clientes")
-  ws_inventario = sh.worksheet("Inventario")
-  ws_finanzas = sh.worksheet("Finanzas")
-  ws_citas = sh.worksheet("Citas")
+  
+  # Aseguramos hojas y cabeceras si están vacías
+  try:
+    ws_clientes = sh.worksheet("Clientes")
+  except:
+    ws_clientes = sh.add_worksheet(title="Clientes", rows="100", cols="20")
+    ws_clientes.append_row(["Fecha", "Nombre", "Cedula", "Telefono", "Email", "Ocupacion", "TipoPiel", "Fototipo", "Ciclo", "Lesiones", "Enfermedades", "Alergias", "Tratamientos", "Marcapasos", "Placa", "Observaciones"])
+
+  try:
+    ws_inventario = sh.worksheet("Inventario")
+  except:
+    ws_inventario = sh.add_worksheet(title="Inventario", rows="100", cols="20")
+    ws_inventario.append_row(["Fecha", "Nombre", "Tipo", "CostoUSD", "Cantidad", "CostoUnit", "Notas"])
+
+  try:
+    ws_finanzas = sh.worksheet("Finanzas")
+  except:
+    ws_finanzas = sh.add_worksheet(title="Finanzas", rows="100", cols="20")
+    ws_finanzas.append_row(["Fecha", "Tipo", "Concepto", "Monto", "SueldoCosmiatra", "FondoReposicion", "Metodo", "Categoria", "Notas"])
+
+  try:
+    ws_citas = sh.worksheet("Citas")
+  except:
+    ws_citas = sh.add_worksheet(title="Citas", rows="100", cols="20")
+    ws_citas.append_row(["Fecha", "Hora", "NombreClienta", "Cedula", "Telefono", "Tratamiento", "Estado", "Observaciones"])
+
   try:
     ws_servicios = sh.worksheet("Servicios")
   except:
     ws_servicios = sh.add_worksheet(title="Servicios", rows="100", cols="20")
     ws_servicios.append_row(["Fecha", "NombreServicio", "Sesiones", "PrecioUSD", "SueldoFijoUSD", "Aparatologia", "Activos", "Descripcion"])
-except Exception:
-  sh = conectar_google_sheets().spreadsheet
-  ws_clientes = sh.add_worksheet(title="Clientes", rows="100", cols="20")
-  ws_inventario = sh.add_worksheet(title="Inventario", rows="100", cols="20")
-  ws_finanzas = sh.add_worksheet(title="Finanzas", rows="100", cols="20")
-  ws_citas = sh.add_worksheet(title="Citas", rows="100", cols="20")
-  ws_servicios = sh.add_worksheet(title="Servicios", rows="100", cols="20")
-  ws_servicios.append_row(["Fecha", "NombreServicio", "Sesiones", "PrecioUSD", "SueldoFijoUSD", "Aparatologia", "Activos", "Descripcion"])
+
+except Exception as e:
+  st.error(f"Error en la estructura de Google Sheets: {e}")
+  st.stop()
 
 # ============================================
 # MENÚ LATERAL
@@ -108,7 +126,7 @@ menu = st.sidebar.selectbox(
 )
 
 # ============================================
-# 1. DASHBOARD PRINCIPAL
+# 1. DASHBOARD PRINCIPAL (CONEXIÓN FINANCIERA)
 # ============================================
 if menu == "📊 Dashboard Principal":
   st.title("Dashboard Principal - Nay López Skincare")
@@ -126,10 +144,10 @@ if menu == "📊 Dashboard Principal":
 
   try:
     finanzas_data = ws_finanzas.get_all_records()
-    ingresos = sum([float(x.get("Monto", 0)) for x in finanzas_data if x.get("Tipo") == "Ingreso"]) if finanzas_data else 0.0
-    egresos = sum([float(x.get("Monto", 0)) for x in finanzas_data if x.get("Tipo") == "Gasto"]) if finanzas_data else 0.0
-    fondo_repo = sum([float(x.get("FondoReposicion", 0)) for x in finanzas_data if x.get("Tipo") == "Ingreso"]) if finanzas_data else 0.0
-    sueldo_neto = sum([float(x.get("SueldoCosmiatra", 0)) for x in finanzas_data if x.get("Tipo") == "Ingreso"]) if finanzas_data else 0.0
+    ingresos = sum([float(x.get("Monto", 0)) for x in finanzas_data if str(x.get("Tipo", "")).strip() == "Ingreso"]) if finanzas_data else 0.0
+    egresos = sum([float(x.get("Monto", 0)) for x in finanzas_data if str(x.get("Tipo", "")).strip() == "Gasto"]) if finanzas_data else 0.0
+    fondo_repo = sum([float(x.get("FondoReposicion", 0)) for x in finanzas_data if str(x.get("Tipo", "")).strip() == "Ingreso"]) if finanzas_data else 0.0
+    sueldo_neto = sum([float(x.get("SueldoCosmiatra", 0)) for x in finanzas_data if str(x.get("Tipo", "")).strip() == "Ingreso"]) if finanzas_data else 0.0
   except:
     ingresos, egresos, fondo_repo, sueldo_neto = 0.0, 0.0, 0.0, 0.0
 
@@ -140,10 +158,10 @@ if menu == "📊 Dashboard Principal":
   col4.metric("📉 Egresos / Gastos", f"${egresos:.2f}")
 
   st.divider()
-  st.info("💡 **Sistema Integrado:** Al agendar una cita, el cliente se registra solo. Al buscar por cédula en Historia Clínica, sus datos aparecen automáticamente.")
+  st.info("💡 **Dashboard Actualizado:** Los datos de ingresos, tu sueldo y el fondo de reposición se sincronizan automáticamente desde el módulo de Finanzas.")
 
 # ============================================
-# 2. AGENDA (REGISTRA AUTOMÁTICO EN CLIENTES)
+# 2. AGENDA
 # ============================================
 elif menu == "📅 Agenda":
   st.title("Agenda de Citas y Turnos")
@@ -166,10 +184,9 @@ elif menu == "📅 Agenda":
       obs_c = st.text_area("Observaciones del turno")
       if st.form_submit_button("Agendar Turno y Registrar Cliente"):
         if nom_c and ced_c:
-          # 1. Guardamos en la Agenda
-          ws_citas.append_row([str(fec_c), str(hor_c), nom_c, ced_c, tel_c, trat_c, "Agendada", obs_c])
+          ws_citas.append_row([str(fec_c), str(hor_c), nom_c, str(ced_c), tel_c, trat_c, "Agendada", obs_c])
           
-          # 2. Registramos automáticamente en Clientes (evitando duplicados básicos por cédula si ya existe)
+          # Verificamos si ya existe en Clientes por cédula para no duplicar cabecera vacía
           try:
             cli_data = ws_clientes.get_all_records()
             cedulas_existentes = [str(x.get("Cedula", "")) for x in cli_data]
@@ -179,12 +196,12 @@ elif menu == "📅 Agenda":
           if str(ced_c) not in cedulas_existentes:
             ws_clientes.append_row([
                 str(datetime.now().strftime("%Y-%m-%d %H:%M")),
-                nom_c, ced_c, tel_c, "", "", "", "", "", "", "", "", "", "", "", ""
+                nom_c, str(ced_c), tel_c, "", "", "", "", "", "", "", "", "", "", "", ""
             ])
 
-          st.success(f"¡Turno agendado y clienta {nom_c} registrada con éxito en el sistema!")
+          st.success(f"¡Turno agendado y clienta {nom_c} registrada con éxito!")
         else:
-          st.warning("Por favor ingresa al menos el nombre y la cédula de la clienta.")
+          st.warning("Por favor ingresa al menos el nombre y la cédula.")
 
   with tab2:
     st.subheader("📅 Turnos Registrados")
@@ -198,7 +215,7 @@ elif menu == "📅 Agenda":
       st.info("Agrega tu primer turno para visualizar la agenda.")
 
 # ============================================
-# 3. SERVICIOS (CON SUELDO FIJO POR PROTOCOLO)
+# 3. SERVICIOS Y TARIFAS
 # ============================================
 elif menu == "🧴 Servicios y Tarifas":
   st.title("Catálogo de Servicios y Protocolos")
@@ -213,7 +230,7 @@ elif menu == "🧴 Servicios y Tarifas":
         s_nombre = st.text_input("Nombre del Tratamiento (Ej: Hydra Glow Detox)")
         s_sesiones = st.text_input("Cantidad de Sesiones (Ej: 1 sesión o Paquete)")
         s_precio = st.number_input("Precio de Venta al Público ($)", min_value=0.0, step=0.50, value=35.0)
-        s_sueldo = st.number_input("Tu Sueldo Fijo por este Servicio ($)", min_value=0.0, step=0.50, value=5.0, help="Lo que ganas tú directamente por realizar este servicio (ej. $5 o $6).")
+        s_sueldo = st.number_input("Tu Sueldo Fijo por este Servicio ($)", min_value=0.0, step=0.50, value=5.0)
       with col_s2:
         s_aparatos = st.text_input("Aparatología Usada")
         s_activos = st.text_input("Principios Activos")
@@ -246,7 +263,7 @@ elif menu == "🧴 Servicios y Tarifas":
 # ============================================
 elif menu == "👥 Clientes":
   st.title("Directorio de Clientes")
-  st.markdown("Listado oficial de clientas que se van registrando automáticamente desde la agenda o su historia clínica.")
+  st.markdown("Listado oficial de clientas registradas en el sistema.")
 
   try:
     data_cli = ws_clientes.get_all_records()
@@ -263,35 +280,62 @@ elif menu == "👥 Clientes":
 # ============================================
 elif menu == "👩‍⚕️ Historia Clínica":
   st.title("Historia Clínica y Evaluación")
-  st.markdown("Ingresa la cédula de la clienta agendada y sus datos se precargarán automáticamente para su consulta.")
+  st.markdown("Ingresa o busca la cédula de la clienta para autocompletar sus datos desde la agenda.")
 
-  # Buscador por cédula
-  cedula_buscar = st.text_input("🔍 Ingresa la Cédula de Identidad para buscar clienta:")
-
-  # Buscamos en la base de datos de clientes si ya existe
-  cliente_encontrada = {}
+  # Buscamos datos en Citas y Clientes para sugerir o autocompletar
+  citas_db = []
+  clientes_db = []
   try:
+    citas_db = ws_citas.get_all_records()
     clientes_db = ws_clientes.get_all_records()
-    if cedula_buscar:
-      for cli in clientes_db:
-        if str(cli.get("Cedula", "")) == str(cedula_buscar):
-          cliente_encontrada = cli
-          break
   except:
     pass
 
-  if cedula_buscar and cliente_encontrada:
-    st.success(f"¡Clienta encontrada: {cliente_encontrada.get('Nombre', '')}! Datos cargados automáticamente.")
-  elif cedula_buscar and not cliente_encontrada:
-    st.warning("No se encontró ninguna clienta con esa cédula. Puedes ingresar sus datos manualmente abajo.")
+  # Creamos una lista de cédulas únicas registradas
+  cedulas_disponibles = sorted(list(set([str(c.get("Cedula", "")) for c in citas_db if c.get("Cedula")] + [str(cli.get("Cedula", "")) for cli in clientes_db if cli.get("Cedula")])))
+
+  cedula_buscada = st.selectbox("🔍 Selecciona o escribe la Cédula de Identidad de la Clienta:", ["-- Selecciona una cédula --"] + cedulas_disponibles)
+  
+  # Si prefiere escribirla de forma manual por texto
+  cedula_texto = st.text_input("O escribe la cédula directamente aquí:")
+  
+  cedula_final = ""
+  if cedula_texto:
+    cedula_final = cedula_texto.strip()
+  elif cedula_buscada != "-- Selecciona una cédula --":
+    cedula_final = cedula_buscada.strip()
+
+  # Buscamos la info precargada correspondiente a esa cédula
+  nombre_prefill = ""
+  telefono_prefill = ""
+
+  if cedula_final:
+    # Buscamos primero en citas
+    for c in citas_db:
+      if str(c.get("Cedula", "")).strip() == cedula_final:
+        nombre_prefill = c.get("NombreClienta", "")
+        telefono_prefill = c.get("Telefono", "")
+        break
+    # Si no está en citas, buscamos en clientes
+    if not nombre_prefill:
+      for cli in clientes_db:
+        if str(cli.get("Cedula", "")).strip() == cedula_final:
+          nombre_prefill = cli.get("Nombre", "")
+          telefono_prefill = cli.get("Telefono", "")
+          break
+
+  if cedula_final and nombre_prefill:
+    st.success(f"✨ Datos encontrados para la cédula {cedula_final}: **{nombre_prefill}**")
+  elif cedula_final and not nombre_prefill:
+    st.warning("No hay registros previos con esta cédula, puedes completar su nombre manualmente.")
 
   st.markdown("---")
   with st.form("form_hc_autocompletada", clear_on_submit=True):
     col1, col2 = st.columns(2)
     with col1:
-      nombre = st.text_input("Nombre y Apellido", value=cliente_encontrada.get("Nombre", ""))
-      cedula = st.text_input("Cédula de Identidad", value=cedula_buscar if cedula_buscar else cliente_encontrada.get("Cedula", ""))
-      telefono = st.text_input("Número de Contacto / WhatsApp", value=cliente_encontrada.get("Telefono", ""))
+      nombre = st.text_input("Nombre y Apellido", value=nombre_prefill)
+      cedula = st.text_input("Cédula de Identidad", value=cedula_final)
+      telefono = st.text_input("Número de Contacto / WhatsApp", value=telefono_prefill)
       email = st.text_input("Correo Electrónico")
       ocupacion = st.text_input("Ocupación")
     with col2:
@@ -326,23 +370,23 @@ elif menu == "👩‍⚕️ Historia Clínica":
       if nombre and cedula:
         tipos_str = ", ".join([t for t, cond in [("Eudérmica", p_eud), ("Seca", p_sec), ("Grasa", p_gra), ("Mixta", p_mix), ("Alipica", p_ali), ("Deshidratada", p_des), ("Sensible", p_sen)] if cond])
         
-        # Guardamos o actualizamos en la pestaña Clientes
+        # Guardamos la historia clínica completa en la pestaña Clientes
         ws_clientes.append_row([
             str(datetime.now().strftime("%Y-%m-%d %H:%M")),
-            nombre, cedula, telefono, email, ocupacion,
+            nombre, str(cedula), telefono, email, ocupacion,
             tipos_str, fototipo, ciclo, lesiones,
             enfermedad, alergias, tratamientos, marcapasos, placa, obs
         ])
-        st.success(f"¡Historia clínica de {nombre} guardada y vinculada con éxito en Clientes!")
+        st.success(f"¡Historia clínica de {nombre} guardada y actualizada con éxito!")
       else:
         st.warning("Por favor asegúrate de que el nombre y la cédula estén llenos.")
 
 # ============================================
-# 6. FINANZAS (CON SUELDO ESPECÍFICO Y FONDO DE REPOSICIÓN)
+# 6. FINANZAS (CONEXIÓN EXACTA CON DASHBOARD)
 # ============================================
 elif menu == "💰 Finanzas":
   st.title("Control Financiero y Distribución de Ganancias")
-  st.markdown("Calcula automáticamente tu sueldo por servicio ($5-$6) y el fondo para reposición de materiales.")
+  st.markdown("Calcula automáticamente tu sueldo fijo por servicio y el fondo para reposición de materiales.")
 
   tab1, tab2 = st.tabs(["Registrar Ingreso / Gasto", "Reporte de Ganancias y Reposición"])
 
@@ -360,8 +404,8 @@ elif menu == "💰 Finanzas":
       st.markdown("---")
       st.markdown("### 🧮 Desglose Automático (Sueldo Fijo + Fondo de Reposición)")
       
-      # Intentamos cargar los servicios registrados para seleccionar el sueldo fijo correspondiente
-      sueldo_sugerido = 5.0 # Sueldo por defecto
+      sueldo_sugerido = 5.0
+      serv_db = []
       try:
         serv_db = ws_servicios.get_all_records()
         nombres_serv = [s.get("NombreServicio", "") for s in serv_db]
@@ -377,24 +421,28 @@ elif menu == "💰 Finanzas":
       else:
         sueldo_sugerido = st.number_input("Tu sueldo fijo para este servicio ($):", min_value=0.0, value=5.0)
 
-      # Cálculos
       sueldo_cosmiatra = sueldo_sugerido if tipo_mov == "Ingreso" else 0.0
-      # Lo restante del cobro del servicio va para el fondo de reposición de materiales y clínica
       fondo_reposicion = (monto_total - sueldo_cosmiatra) if (tipo_mov == "Ingreso" and monto_total > sueldo_cosmiatra) else 0.0
 
       if tipo_mov == "Ingreso":
-        st.info(f"💡 Del cobro total de **${monto_total:.2f}**: **${sueldo_cosmiatra:.2f}** van para tu sueldo y **${fondo_reposicion:.2f}** van destinados al fondo de reposición de materiales.")
+        st.info(f"💡 Del cobro total de **${monto_total:.2f}**: **${sueldo_cosmiatra:.2f}** van para tu sueldo y **${fondo_reposicion:.2f}** van destinados al fondo de reposición.")
 
       obs_f = st.text_area("Notas adicionales")
-      if st.form_submit_button("Guardar Movimiento"):
+      if st.form_submit_button("Guardar Movimiento en Caja"):
         if concepto and monto_total > 0:
+          # Guardamos en la misma estructura exacta que lee el Dashboard
           ws_finanzas.append_row([
               str(datetime.now().strftime("%Y-%m-%d %H:%M")),
-              tipo_mov, concepto, float(monto_total), 
-              float(sueldo_cosmiatra), float(fondo_reposicion),
-              metodo, cat, obs_f
+              tipo_mov, 
+              concepto, 
+              float(monto_total), 
+              float(sueldo_cosmiatra), 
+              float(fondo_reposicion),
+              metodo, 
+              cat, 
+              obs_f
           ])
-          st.success(f"¡Movimiento registrado con éxito!")
+          st.success(f"¡Movimiento registrado con éxito y sincronizado con el Dashboard!")
         else:
           st.warning("Completa el concepto y un monto válido.")
 
