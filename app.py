@@ -12,39 +12,50 @@ st.set_page_config(
 )
 
 # ============================================
-# ESTILO VISUAL ELEGANTE (TIPO APP MODERNA)
+# ESTILO VISUAL: BLANCO, LILA Y TONOS CÁLIDOS
 # ============================================
 st.markdown("""
     <style>
+    /* Fondo general claro y limpio */
     .stApp {
-        background-color: #0e0e10;
-        color: #f3f4f6;
+        background-color: #fcfbfd;
+        color: #2d2b38;
     }
+    
+    /* Contenedores y tarjetas con fondo blanco y bordes sutiles en lila suave */
     div.stMetric, div.stTabs, div.stForm {
-        background-color: #18181b;
+        background-color: #ffffff;
         padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #27272a;
+        border-radius: 14px;
+        border: 1px solid #e9d8fd;
+        box-shadow: 0 4px 15px rgba(147, 51, 234, 0.04);
     }
+
+    /* Botones principales en degradado lila y violeta elegante */
     .stButton>button {
-        background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+        background: linear-gradient(135deg, #a855f7 0%, #c084fc 100%);
         color: white;
         border: none;
         border-radius: 8px;
         font-weight: 600;
-        padding: 0.5rem 1rem;
-        box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+        padding: 0.5rem 1.2rem;
+        box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
     }
+    
     .stButton>button:hover {
-        opacity: 0.9;
+        background: linear-gradient(135deg, #9333ea 0%, #a855f7 100%);
         color: white;
     }
+
+    /* Barra lateral en tonos cálidos y lila claro */
     section[data-testid="stSidebar"] {
-        background-color: #121215;
-        border-right: 1px solid #27272a;
+        background-color: #f7f2fb;
+        border-right: 1px solid #e9d8fd;
     }
+
+    /* Títulos con personalidad lila y profesional */
     h1, h2, h3 {
-        color: #ffffff;
+        color: #581c87;
         font-family: 'Inter', sans-serif;
     }
     </style>
@@ -72,15 +83,22 @@ try:
   ws_inventario = sh.worksheet("Inventario")
   ws_finanzas = sh.worksheet("Finanzas")
   ws_citas = sh.worksheet("Citas")
+  try:
+    ws_servicios = sh.worksheet("Servicios")
+  except:
+    ws_servicios = sh.add_worksheet(title="Servicios", rows="100", cols="20")
+    ws_servicios.append_row(["Fecha", "NombreServicio", "Sesiones", "PrecioUSD", "Aparatologia", "Activos", "Descripcion"])
 except Exception:
   sh = conectar_google_sheets().spreadsheet
   ws_clientes = sh.add_worksheet(title="Clientes", rows="100", cols="20")
   ws_inventario = sh.add_worksheet(title="Inventario", rows="100", cols="20")
   ws_finanzas = sh.add_worksheet(title="Finanzas", rows="100", cols="20")
   ws_citas = sh.add_worksheet(title="Citas", rows="100", cols="20")
+  ws_servicios = sh.add_worksheet(title="Servicios", rows="100", cols="20")
+  ws_servicios.append_row(["Fecha", "NombreServicio", "Sesiones", "PrecioUSD", "Aparatologia", "Activos", "Descripcion"])
 
 # ============================================
-# MENÚ LATERAL (ESTILO DE LA REFERENCIA)
+# MENÚ LATERAL (ESTILO LILA Y BLANCO)
 # ============================================
 st.sidebar.title("✨ Nay López Skincare")
 st.sidebar.markdown("Panel de Control Profesional")
@@ -130,7 +148,7 @@ if menu == "📊 Dashboard Principal":
   col4.metric("📉 Egresos", f"${egresos:.2f}")
 
   st.divider()
-  st.info("💡 **Bienvenida a tu estudio.** Utiliza el menú lateral para navegar por los diferentes módulos de gestión.")
+  st.info("💡 **Bienvenida a tu estudio.** Utiliza el menú lateral para navegar por los módulos de gestión.")
 
 # ============================================
 # 2. AGENDA
@@ -175,32 +193,45 @@ elif menu == "📅 Agenda":
 # 3. SERVICIOS
 # ============================================
 elif menu == "🧴 Servicios":
-  st.title("Catálogo de Servicios y Protocolos")
-  st.markdown("Gestiona los tratamientos que ofreces, sus sesiones y rutinas asociadas.")
+  st.title("Catálogo de Servicios y Protocolos (Tus Precios de Excel)")
+  st.markdown("Registra y pasa aquí toda la estructura de costos, sesiones y protocolos que tienes en tus excels.")
 
-  st.info("✨ **Tus protocolos activos en cabina:**")
-  col_s1, col_s2 = st.columns(2)
-  with col_s1:
-    st.markdown("### 💎 Hydra Glow Detox")
-    st.write("**Descripción:** Limpieza profunda e hidratación extrema.")
-    st.write("**Sesiones:** 1 sesión (Mantenimiento mensual).")
-    st.write("**Precio Sugerido:** $35.00")
-    
-    st.markdown("### 🌿 Control de Acné")
-    st.write("**Descripción:** Tratamiento seborregulador y bacteriostático.")
-    st.write("**Sesiones:** 4 sesiones (1 por semana).")
-    st.write("**Precio Sugerido:** $120.00")
+  tab_s1, tab_s2 = st.tabs(["Registrar / Migrar Protocolo", "Listado de Servicios Activos"])
 
-  with col_s2:
-    st.markdown("### 🌸 Tratamiento de Manchas")
-    st.write("**Descripción:** Despigmentación gradual con activos seguros.")
-    st.write("**Sesiones:** 5 sesiones (cada 15 días).")
-    st.write("**Precio Sugerido:** $140.00")
+  with tab_s1:
+    st.subheader("📝 Agregar o Migrar Protocolo Manual")
+    with st.form("form_servicios_manual", clear_on_submit=True):
+      col_s1, col_s2 = st.columns(2)
+      with col_s1:
+        s_nombre = st.text_input("Nombre del Tratamiento / Protocolo (Ej: Hydra Glow Detox)")
+        s_sesiones = st.text_input("Cantidad de Sesiones (Ej: 1 sesión o Paquete de 4)")
+        s_precio = st.number_input("Precio Establecido ($)", min_value=0.0, step=0.50, value=35.0)
+      with col_s2:
+        s_aparatos = st.text_input("Aparatología Usada (Ej: Espátula ultrasónica, 5 en 1)")
+        s_activos = st.text_input("Principios Activos (Ej: Papaina, Bromelina, Ácido Hialurónico)")
+      
+      s_desc = st.text_area("Descripción detallada del protocolo (Paso a paso que tenías en tu Excel)")
 
-    st.markdown("### 🪄 Dermapen (Rejuvenecimiento)")
-    st.write("**Descripción:** Inducción de colágeno con microagujas.")
-    st.write("**Sesiones:** 3 sesiones (cada 21 días).")
-    st.write("**Precio Sugerido:** $150.00")
+      if st.form_submit_button("Guardar Protocolo en el Sistema"):
+        if s_nombre:
+          ws_servicios.append_row([
+              str(datetime.now().strftime("%Y-%m-%d %H:%M")),
+              s_nombre, s_sesiones, float(s_precio), s_aparatos, s_activos, s_desc
+          ])
+          st.success(f"¡Protocolo '{s_nombre}' guardado con éxito y vinculado a tu base de datos!")
+        else:
+          st.warning("Por favor ingresa el nombre del servicio.")
+
+  with tab_s2:
+    st.subheader("📋 Tus Protocolos y Precios Registrados")
+    try:
+      data_serv = ws_servicios.get_all_records()
+      if data_serv:
+        st.dataframe(pd.DataFrame(data_serv), use_container_width=True)
+      else:
+        st.info("Aún no hay servicios registrados. Pasa la información de tu Excel en la pestaña de al lado.")
+    except:
+      st.info("Registra tu primer servicio para visualizar la tabla.")
 
 # ============================================
 # 4. CLIENTES
@@ -213,7 +244,6 @@ elif menu == "👥 Clientes":
     data_cli = ws_clientes.get_all_records()
     if data_cli:
       df_cli = pd.DataFrame(data_cli)
-      # Mostramos columnas principales para el directorio
       cols_mostrar = [c for c in ["Fecha", "Nombre", "Cedula", "Telefono", "Email", "Ocupacion"] if c in df_cli.columns]
       st.dataframe(df_cli[cols_mostrar], use_container_width=True)
     else:
@@ -278,7 +308,7 @@ elif menu == "👩‍⚕️ Historia Clínica":
         st.warning("Por favor ingresa al menos el nombre y apellido.")
 
 # ============================================
-# 6. FINANZAS (CONTROL DE INGRESOS Y EGRESOS)
+# 6. FINANZAS
 # ============================================
 elif menu == "💰 Finanzas":
   st.title("Control de Finanzas (Ingresos y Egresos)")
