@@ -179,8 +179,7 @@ if menu == "Inicio / Dashboard":
 elif menu == "Clientes y Ficha Clínica":
   st.title("Gestión de Pacientes y Ficha Estética")
   st.markdown(
-      "Registra los datos de tus pacientes y lleva su historial clínico en"
-      " línea."
+      "Ficha clínica profesional y antecedentes estéticos de la paciente."
   )
 
   tab1, tab2 = st.tabs(["Registrar Nueva Paciente", "Consultar Fichas"])
@@ -191,52 +190,76 @@ elif menu == "Clientes y Ficha Clínica":
     col1, col2 = st.columns(2)
     with col1:
       nombre = st.text_input("Nombre y Apellido")
-      telefono = st.text_input("Teléfono / WhatsApp")
+      cedula = st.text_input("Cédula de Identidad")
+      telefono = st.text_input("Número de Contacto / WhatsApp")
       email = st.text_input("Correo Electrónico")
 
     with col2:
-      tipo_piel = st.selectbox(
-          "Tipo de Piel",
-          ["Eudérmica (Normal)", "Seca", "Grasa", "Mixta", "Alipica"],
+      # Selección múltiple para tipo de piel
+      tipo_piel = st.multiselect(
+          "Tipo de Piel (Puedes seleccionar varios)",
+          [
+              "Eudérmica (Normal)",
+              "Seca",
+              "Grasa",
+              "Mixta",
+              "Alipica",
+              "Deshidratada",
+              "Sensible",
+          ],
       )
       fototipo = st.selectbox(
           "Fototipo Cutáneo (Fitzpatrick)",
           ["Tipo I", "Tipo II", "Tipo III", "Tipo IV", "Tipo V", "Tipo VI"],
       )
-      tratamiento_interes = st.selectbox(
-          "Tratamiento Principal",
-          [
-              "Hydra Glow Detox (Limpieza Profunda)",
-              "Peeling (Papaína / Bromelina / Ácidos)",
-              "Dermapen (Microneedling)",
-              "Radiofrecuencia Facial",
-              "Tratamiento Corporal",
-              "Otro",
-          ],
+
+    st.divider()
+    st.subheader("🩺 Historia Clínica y Antecedentes")
+
+    col3, col4 = st.columns(2)
+    with col3:
+      antecedentes = st.text_area("Antecedentes Médicos")
+      enfermedad = st.text_area("¿Padece alguna enfermedad actual?")
+      alergias = st.text_area("Alergias conocidas")
+
+    with col4:
+      tratamientos_recientes = st.text_area(
+          "Tratamientos Estéticos Recientes (Últimos 6 meses)"
+      )
+      implantes = st.selectbox(
+          "¿Posee algún marcapasos o placa metálica?",
+          ["No", "Sí (Placa Metálica)", "Sí (Marcapasos)", "Sí (Ambos)"],
       )
 
-    observaciones = st.text_area(
-        "Alergias, Patologías, Medicamentos o Antecedentes Estéticos"
+    observacion = st.text_area(
+        "Observaciones Generales / Recomendaciones para Cabina"
     )
 
     if st.button("Guardar Ficha de Paciente"):
       if nombre:
+        # Convertimos la lista de tipos de piel a texto separado por comas para guardarlo bien en la celda
+        tipos_piel_str = ", ".join(tipo_piel) if tipo_piel else "No especificado"
+
         ws_clientes.append_row([
             str(datetime.now().strftime("%Y-%m-%d %H:%M")),
             nombre,
+            cedula,
             telefono,
             email,
-            tipo_piel,
+            tipos_piel_str,
             fototipo,
-            observaciones,
-            tratamiento_interes,
+            antecedentes,
+            enfermedad,
+            alergias,
+            tratamientos_recientes,
+            implantes,
+            observacion,
         ])
         st.success(
-            f"¡Ficha de la paciente {nombre} guardada con éxito en Google"
-            " Sheets!"
+            f"¡Ficha clínica de {nombre} guardada con éxito en Google Sheets!"
         )
       else:
-        st.warning("Por favor ingresa al menos el nombre de la paciente.")
+        st.warning("Por favor ingresa al menos el nombre y apellido.")
 
   with tab2:
     st.subheader("Base de Datos de Pacientes y Fichas")
@@ -246,10 +269,7 @@ elif menu == "Clientes y Ficha Clínica":
         df_clientes = pd.DataFrame(data_clientes)
         st.dataframe(df_clientes, use_container_width=True)
       else:
-        st.info(
-            "Aún no hay pacientes registradas. ¡Agrega la primera en la pestaña"
-            " de 'Registrar Nueva Paciente'!"
-        )
+        st.info("Aún no hay pacientes registradas en la base de datos.")
     except Exception as e:
       st.info("Registra tu primera paciente para visualizar la tabla.")
 
