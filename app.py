@@ -179,13 +179,13 @@ if menu == "Inicio / Dashboard":
 elif menu == "Clientes y Ficha Clínica":
   st.title("Gestión de Pacientes y Ficha Estética")
   st.markdown(
-      "Ficha clínica profesional y antecedentes estéticos de la paciente."
+      "Historia clínica completa y registro detallado de cada paciente."
   )
 
   tab1, tab2 = st.tabs(["Registrar Nueva Paciente", "Consultar Fichas"])
 
   with tab1:
-    st.subheader("Ficha Clínica y Datos de la Paciente")
+    st.subheader("📝 Ficha Clínica y Datos de la Paciente")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -193,52 +193,45 @@ elif menu == "Clientes y Ficha Clínica":
       cedula = st.text_input("Cédula de Identidad")
       telefono = st.text_input("Número de Contacto / WhatsApp")
       email = st.text_input("Correo Electrónico")
+      ocupacion = st.text_input("Ocupación")
 
     with col2:
-      # Selección múltiple para tipo de piel
+      # Selección múltiple para tipo de piel usando multiselect de Streamlit
       tipo_piel = st.multiselect(
-          "Tipo de Piel (Puedes seleccionar varios)",
-          [
-              "Eudérmica (Normal)",
-              "Seca",
-              "Grasa",
-              "Mixta",
-              "Alipica",
-              "Deshidratada",
-              "Sensible",
-          ],
+          "Tipo de Piel (Selección Múltiple)",
+          ["Eudérmica", "Seca", "Grasa", "Mixta", "Alipica", "Deshidratada", "Sensible"],
       )
+      
       fototipo = st.selectbox(
           "Fototipo Cutáneo (Fitzpatrick)",
           ["Tipo I", "Tipo II", "Tipo III", "Tipo IV", "Tipo V", "Tipo VI"],
       )
+      
+      ciclo_menstrual = st.selectbox(
+          "¿Cómo es su ciclo menstrual?",
+          ["Regular", "Irregular", "Ausente / Amenorrea", "Menopausia", "No aplica"],
+      )
 
-    st.divider()
-    st.subheader("🩺 Historia Clínica y Antecedentes")
+    st.markdown("---")
+    st.subheader("🔍 Antecedentes y Seguridad en Cabina")
 
     col3, col4 = st.columns(2)
     with col3:
-      antecedentes = st.text_area("Antecedentes Médicos")
       enfermedad = st.text_area("¿Padece alguna enfermedad actual?")
+      antecedentes = st.text_area("Antecedentes Médicos")
       alergias = st.text_area("Alergias conocidas")
 
     with col4:
-      tratamientos_recientes = st.text_area(
-          "Tratamientos Estéticos Recientes (Últimos 6 meses)"
-      )
-      implantes = st.selectbox(
-          "¿Posee algún marcapasos o placa metálica?",
-          ["No", "Sí (Placa Metálica)", "Sí (Marcapasos)", "Sí (Ambos)"],
-      )
+      tratamientos_recientes = st.text_area("Tratamientos estéticos / médicos recientes")
+      marcapasos = st.radio("¿Posee marcapasos?", ["No", "Sí"])
+      placa_metalica = st.radio("¿Posee placa u otros implantes metálicos?", ["No", "Sí"])
 
-    observacion = st.text_area(
-        "Observaciones Generales / Recomendaciones para Cabina"
-    )
+    observaciones = st.text_area("Observaciones Generales de la Cosmiatra")
 
-    if st.button("Guardar Ficha de Paciente"):
+    if st.button("Guardar Ficha Clínica Completa"):
       if nombre:
-        # Convertimos la lista de tipos de piel a texto separado por comas para guardarlo bien en la celda
-        tipos_piel_str = ", ".join(tipo_piel) if tipo_piel else "No especificado"
+        # Convertimos la lista de tipo de piel en texto separado por comas para guardarlo bien en Google Sheets
+        tipo_piel_str = ", ".join(tipo_piel) if tipo_piel else "No especificado"
 
         ws_clientes.append_row([
             str(datetime.now().strftime("%Y-%m-%d %H:%M")),
@@ -246,32 +239,33 @@ elif menu == "Clientes y Ficha Clínica":
             cedula,
             telefono,
             email,
-            tipos_piel_str,
+            ocupacion,
+            tipo_piel_str,
             fototipo,
-            antecedentes,
+            ciclo_menstrual,
             enfermedad,
+            antecedentes,
             alergias,
             tratamientos_recientes,
-            implantes,
-            observacion,
+            marcapasos,
+            placa_metalica,
+            observaciones,
         ])
-        st.success(
-            f"¡Ficha clínica de {nombre} guardada con éxito en Google Sheets!"
-        )
+        st.success(f"¡Ficha clínica de {nombre} guardada con éxito en Google Sheets!")
       else:
-        st.warning("Por favor ingresa al menos el nombre y apellido.")
+        st.warning("Por favor ingresa al menos el nombre y apellido de la paciente.")
 
   with tab2:
-    st.subheader("Base de Datos de Pacientes y Fichas")
+    st.subheader("📂 Base de Datos de Pacientes y Fichas Clínicas")
     try:
       data_clientes = ws_clientes.get_all_records()
       if data_clientes and len(data_clientes) > 0:
         df_clientes = pd.DataFrame(data_clientes)
         st.dataframe(df_clientes, use_container_width=True)
       else:
-        st.info("Aún no hay pacientes registradas en la base de datos.")
+        st.info("Aún no hay pacientes registradas. ¡Crea la primera en la pestaña de al lado!")
     except Exception as e:
-      st.info("Registra tu primera paciente para visualizar la tabla.")
+      st.info("Registra tu primera paciente para visualizar la tabla de historias clínicas.")
 
 elif menu == "Inventario / Productos":
   st.title("Control de Inventario y Activos de Cabina")
