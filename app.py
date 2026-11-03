@@ -16,13 +16,10 @@ st.set_page_config(
 # ============================================
 st.markdown("""
     <style>
-    /* Fondo general claro y limpio */
     .stApp {
         background-color: #fcfbfd;
         color: #2d2b38;
     }
-    
-    /* Contenedores y tarjetas con fondo blanco y bordes sutiles en lila suave */
     div.stMetric, div.stTabs, div.stForm {
         background-color: #ffffff;
         padding: 20px;
@@ -30,8 +27,6 @@ st.markdown("""
         border: 1px solid #e9d8fd;
         box-shadow: 0 4px 15px rgba(147, 51, 234, 0.04);
     }
-
-    /* Botones principales en degradado lila y violeta elegante */
     .stButton>button {
         background: linear-gradient(135deg, #a855f7 0%, #c084fc 100%);
         color: white;
@@ -41,19 +36,14 @@ st.markdown("""
         padding: 0.5rem 1.2rem;
         box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
     }
-    
     .stButton>button:hover {
         background: linear-gradient(135deg, #9333ea 0%, #a855f7 100%);
         color: white;
     }
-
-    /* Barra lateral en tonos cálidos y lila claro */
     section[data-testid="stSidebar"] {
         background-color: #f7f2fb;
         border-right: 1px solid #e9d8fd;
     }
-
-    /* Títulos con personalidad lila y profesional */
     h1, h2, h3 {
         color: #581c87;
         font-family: 'Inter', sans-serif;
@@ -98,7 +88,7 @@ except Exception:
   ws_servicios.append_row(["Fecha", "NombreServicio", "Sesiones", "PrecioUSD", "Aparatologia", "Activos", "Descripcion"])
 
 # ============================================
-# MENÚ LATERAL (ESTILO LILA Y BLANCO)
+# MENÚ LATERAL
 # ============================================
 st.sidebar.title("✨ Nay López Skincare")
 st.sidebar.markdown("Panel de Control Profesional")
@@ -122,7 +112,7 @@ menu = st.sidebar.selectbox(
 # ============================================
 if menu == "📊 Dashboard Principal":
   st.title("Dashboard Principal - Nay López Skincare")
-  st.markdown("### ✨ Turnos, servicios y seguimiento de clientas.")
+  st.markdown("### ✨ Control general de turnos, ingresos y rentabilidad.")
 
   try:
     total_pacientes = len(ws_clientes.get_all_records())
@@ -138,24 +128,26 @@ if menu == "📊 Dashboard Principal":
     finanzas_data = ws_finanzas.get_all_records()
     ingresos = sum([float(x.get("Monto", 0)) for x in finanzas_data if x.get("Tipo") == "Ingreso"]) if finanzas_data else 0.0
     egresos = sum([float(x.get("Monto", 0)) for x in finanzas_data if x.get("Tipo") == "Gasto"]) if finanzas_data else 0.0
+    fondo_repo = sum([float(x.get("FondoReposicion", 0)) for x in finanzas_data if x.get("Tipo") == "Ingreso"]) if finanzas_data else 0.0
+    sueldo_neto = sum([float(x.get("SueldoCosmiatra", 0)) for x in finanzas_data if x.get("Tipo") == "Ingreso"]) if finanzas_data else 0.0
   except:
-    ingresos, egresos = 0.0, 0.0
+    ingresos, egresos, fondo_repo, sueldo_neto = 0.0, 0.0, 0.0, 0.0
 
   col1, col2, col3, col4 = st.columns(4)
-  col1.metric("👥 Total Clientes", total_pacientes)
-  col2.metric("📦 Productos", total_inventario)
-  col3.metric("💰 Ingresos", f"${ingresos:.2f}")
-  col4.metric("📉 Egresos", f"${egresos:.2f}")
+  col1.metric("💰 Ingresos Totales", f"${ingresos:.2f}")
+  col2.metric("👩‍⚕️ Tu Sueldo Generado", f"${sueldo_neto:.2f}")
+  col3.metric("📦 Fondo Reposición", f"${fondo_repo:.2f}")
+  col4.metric("📉 Egresos / Gastos", f"${egresos:.2f}")
 
   st.divider()
-  st.info("💡 **Bienvenida a tu estudio.** Utiliza el menú lateral para navegar por los módulos de gestión.")
+  st.info("💡 **Consejo:** Al registrar los pagos en **Finanzas**, el sistema distribuye automáticamente cuánto va para tu sueldo y cuánto para reposición de materiales.")
 
 # ============================================
 # 2. AGENDA
 # ============================================
 elif menu == "📅 Agenda":
   st.title("Agenda de Citas y Turnos")
-  st.markdown("Organiza y programa la atención de tus clientas en cabina.")
+  st.markdown("Registra las citas iniciales con los datos básicos de tus clientas.")
 
   tab1, tab2 = st.tabs(["Agendar Turno", "Ver Calendario"])
 
@@ -163,20 +155,21 @@ elif menu == "📅 Agenda":
     with st.form("form_citas", clear_on_submit=True):
       col1, col2 = st.columns(2)
       with col1:
-        nom_c = st.text_input("Nombre de la Clienta")
+        nom_c = st.text_input("Nombre y Apellido de la Clienta")
+        ced_c = st.text_input("Cédula de Identidad")
+        tel_c = st.text_input("Número de Contacto / WhatsApp")
+      with col2:
         fec_c = st.date_input("Fecha del Turno")
         hor_c = st.time_input("Hora del Turno")
-      with col2:
         trat_c = st.selectbox("Servicio / Tratamiento", ["Hydra Glow Detox", "Peeling Químico / Enzimático", "Dermapen", "Tratamiento Corporal"])
-        est_c = st.selectbox("Estado", ["Agendada", "Confirmada", "Atendida", "Cancelada"])
       
       obs_c = st.text_area("Observaciones del turno")
-      if st.form_submit_button("Guardar Turno"):
-        if nom_c:
-          ws_citas.append_row([str(fec_c), str(hor_c), nom_c, trat_c, est_c, obs_c])
-          st.success(f"¡Turno agendado con éxito para {nom_c}!")
+      if st.form_submit_button("Agendar Turno"):
+        if nom_c and ced_c:
+          ws_citas.append_row([str(fec_c), str(hor_c), nom_c, ced_c, tel_c, trat_c, "Agendada", obs_c])
+          st.success(f"¡Turno agendado con éxito para {nom_c} (Cédula: {ced_c})!")
         else:
-          st.warning("Ingresa el nombre de la clienta.")
+          st.warning("Por favor ingresa al menos el nombre y la cédula de la clienta.")
 
   with tab2:
     st.subheader("📅 Turnos Registrados")
@@ -193,34 +186,33 @@ elif menu == "📅 Agenda":
 # 3. SERVICIOS
 # ============================================
 elif menu == "🧴 Servicios":
-  st.title("Catálogo de Servicios y Protocolos (Tus Precios de Excel)")
-  st.markdown("Registra y pasa aquí toda la estructura de costos, sesiones y protocolos que tienes en tus excels.")
+  st.title("Catálogo de Servicios y Precios (Tus Precios de Excel)")
+  st.markdown("Administra los precios, sesiones y protocolos de tu cabina.")
 
   tab_s1, tab_s2 = st.tabs(["Registrar / Migrar Protocolo", "Listado de Servicios Activos"])
 
   with tab_s1:
-    st.subheader("📝 Agregar o Migrar Protocolo Manual")
     with st.form("form_servicios_manual", clear_on_submit=True):
       col_s1, col_s2 = st.columns(2)
       with col_s1:
-        s_nombre = st.text_input("Nombre del Tratamiento / Protocolo (Ej: Hydra Glow Detox)")
+        s_nombre = st.text_input("Nombre del Tratamiento (Ej: Hydra Glow Detox)")
         s_sesiones = st.text_input("Cantidad de Sesiones (Ej: 1 sesión o Paquete de 4)")
         s_precio = st.number_input("Precio Establecido ($)", min_value=0.0, step=0.50, value=35.0)
       with col_s2:
-        s_aparatos = st.text_input("Aparatología Usada (Ej: Espátula ultrasónica, 5 en 1)")
-        s_activos = st.text_input("Principios Activos (Ej: Papaina, Bromelina, Ácido Hialurónico)")
+        s_aparatos = st.text_input("Aparatología Usada")
+        s_activos = st.text_input("Principios Activos")
       
-      s_desc = st.text_area("Descripción detallada del protocolo (Paso a paso que tenías en tu Excel)")
+      s_desc = st.text_area("Descripción detallada del protocolo")
 
-      if st.form_submit_button("Guardar Protocolo en el Sistema"):
+      if st.form_submit_button("Guardar Protocolo"):
         if s_nombre:
           ws_servicios.append_row([
               str(datetime.now().strftime("%Y-%m-%d %H:%M")),
               s_nombre, s_sesiones, float(s_precio), s_aparatos, s_activos, s_desc
           ])
-          st.success(f"¡Protocolo '{s_nombre}' guardado con éxito y vinculado a tu base de datos!")
+          st.success(f"¡Protocolo '{s_nombre}' guardado con éxito!")
         else:
-          st.warning("Por favor ingresa el nombre del servicio.")
+          st.warning("Ingresa el nombre del servicio.")
 
   with tab_s2:
     st.subheader("📋 Tus Protocolos y Precios Registrados")
@@ -229,41 +221,68 @@ elif menu == "🧴 Servicios":
       if data_serv:
         st.dataframe(pd.DataFrame(data_serv), use_container_width=True)
       else:
-        st.info("Aún no hay servicios registrados. Pasa la información de tu Excel en la pestaña de al lado.")
+        st.info("Aún no hay servicios registrados.")
     except:
-      st.info("Registra tu primer servicio para visualizar la tabla.")
+      st.info("Registra tu primer servicio.")
 
 # ============================================
 # 4. CLIENTES
 # ============================================
 elif menu == "👥 Clientes":
-  st.title("Gestión de Clientes")
-  st.markdown("Directorio general de clientas registradas en tu estudio.")
+  st.title("Directorio de Clientes")
+  st.markdown("Listado oficial de clientas atendidas y registradas en el sistema.")
 
   try:
     data_cli = ws_clientes.get_all_records()
     if data_cli:
       df_cli = pd.DataFrame(data_cli)
-      cols_mostrar = [c for c in ["Fecha", "Nombre", "Cedula", "Telefono", "Email", "Ocupacion"] if c in df_cli.columns]
-      st.dataframe(df_cli[cols_mostrar], use_container_width=True)
+      st.dataframe(df_cli, use_container_width=True)
     else:
-      st.info("Aún no hay clientas registradas. Dirígete a 'Historia Clínica' para dar de alta la primera.")
+      st.info("Aún no hay clientas registradas en la base de datos de clientes.")
   except:
-    st.info("Registra tu primera clienta para visualizar el listado.")
+    st.info("Las clientas aparecerán aquí una vez que guardes su historia clínica.")
 
 # ============================================
-# 5. HISTORIA CLÍNICA
+# 5. HISTORIA CLÍNICA (CON BÚSQUEDA AUTOMÁTICA DESDE AGENDA)
 # ============================================
 elif menu == "👩‍⚕️ Historia Clínica":
   st.title("Historia Clínica y Evaluación")
-  st.markdown("Registro detallado de antecedentes, tipo de piel, lesiones y seguridad en cabina.")
+  st.markdown("Busca a la clienta agendada, sus datos se precargarán y al atenderla se guardará en tu directorio de clientes.")
 
-  with st.form("form_hc", clear_on_submit=True):
+  # Intentamos obtener la lista de clientas agendadas para facilitar la búsqueda
+  nombres_agenda = []
+  citas_db = []
+  try:
+    citas_db = ws_citas.get_all_records()
+    nombres_agenda = [f"{c.get('NombreClienta', '')} (Cédula: {c.get('Cedula', '')})" for c in citas_db if c.get('NombreClienta')]
+  except:
+    pass
+
+  clienta_seleccionada = None
+  cedula_prefill = ""
+  tel_prefill = ""
+
+  if nombres_agenda:
+    st.markdown("### 🔍 Buscar Clienta desde la Agenda")
+    opcion_agenda = st.selectbox("Selecciona a la clienta que acudió a consulta:", ["-- Ingresar Manualmente --"] + nombres_agenda)
+    
+    if opcion_agenda != "-- Ingresar Manualmente --":
+      # Extraemos los datos de la cita seleccionada
+      for c in citas_db:
+        if f"{c.get('NombreClienta', '')} (Cédula: {c.get('Cedula', '')})" == opcion_agenda:
+          clienta_seleccionada = c.get('NombreClienta', '')
+          cedula_prefill = c.get('Cedula', '')
+          tel_prefill = c.get('Telefono', '')
+          break
+
+  st.markdown("---")
+  with st.form("form_hc_inteligente", clear_on_submit=True):
     col1, col2 = st.columns(2)
     with col1:
-      nombre = st.text_input("Nombre y Apellido")
-      cedula = st.text_input("Cédula de Identidad")
-      telefono = st.text_input("Número de Contacto / WhatsApp")
+      # Si seleccionó de la agenda, precargamos los datos automáticamente
+      nombre = st.text_input("Nombre y Apellido", value=clienta_seleccionada if clienta_seleccionada else "")
+      cedula = st.text_input("Cédula de Identidad", value=cedula_prefill if cedula_prefill else "")
+      telefono = st.text_input("Número de Contacto / WhatsApp", value=tel_prefill if tel_prefill else "")
       email = st.text_input("Correo Electrónico")
       ocupacion = st.text_input("Ocupación")
     with col2:
@@ -281,7 +300,7 @@ elif menu == "👩‍⚕️ Historia Clínica":
 
     st.markdown("---")
     st.subheader("🎯 Lesiones y Antecedentes Clínicos")
-    lesiones = st.text_area("¿Qué lesiones o afecciones desea tratar? (Acné, melasma, flacidez, etc.)")
+    lesiones = st.text_area("¿Qué lesiones o afecciones desea tratar?")
 
     col3, col4 = st.columns(2)
     with col3:
@@ -294,64 +313,85 @@ elif menu == "👩‍⚕️ Historia Clínica":
 
     obs = st.text_area("Observaciones Generales de la Cosmiatra")
     
-    if st.form_submit_button("Guardar Historia Clínica"):
-      if nombre:
+    if st.form_submit_button("Guardar Atención y Enviar a Clientes"):
+      if nombre and cedula:
         tipos_str = ", ".join([t for t, cond in [("Eudérmica", p_eud), ("Seca", p_sec), ("Grasa", p_gra), ("Mixta", p_mix), ("Alipica", p_ali), ("Deshidratada", p_des), ("Sensible", p_sen)] if cond])
+        
+        # Guardamos directamente en la pestaña Clientes
         ws_clientes.append_row([
             str(datetime.now().strftime("%Y-%m-%d %H:%M")),
             nombre, cedula, telefono, email, ocupacion,
             tipos_str, fototipo, ciclo, lesiones,
             enfermedad, alergias, tratamientos, marcapasos, placa, obs
         ])
-        st.success(f"¡Historia clínica de {nombre} guardada con éxito!")
+        st.success(f"¡Atención finalizada! La historia clínica de {nombre} se ha guardado exitosamente y ya figura en el módulo de Clientes.")
       else:
-        st.warning("Por favor ingresa al menos el nombre y apellido.")
+        st.warning("Por favor asegúrate de que el nombre y la cédula estén llenos.")
 
 # ============================================
-# 6. FINANZAS
+# 6. FINANZAS (CON CONTROL DE SUELDO Y REPOSICIÓN)
 # ============================================
 elif menu == "💰 Finanzas":
-  st.title("Control de Finanzas (Ingresos y Egresos)")
-  st.markdown("Monitorea detalladamente a dónde va cada dólar y controla el flujo de caja.")
+  st.title("Control Financiero: Ingresos, Sueldo y Reposición")
+  st.markdown("Registra los cobros y visualiza exactamente a dónde va cada porcentaje de tu dinero.")
 
-  tab1, tab2 = st.tabs(["Registrar Movimiento", "Historial y Balance"])
+  tab1, tab2 = st.tabs(["Registrar Ingreso / Gasto", "Reporte de Ganancias y Reposición"])
 
   with tab1:
-    with st.form("form_fin", clear_on_submit=True):
+    with st.form("form_fin_avanzado", clear_on_submit=True):
       col1, col2 = st.columns(2)
       with col1:
         tipo_mov = st.selectbox("Tipo de Movimiento", ["Ingreso", "Gasto"])
-        concepto = st.text_input("Concepto (Ej: Cobro Tratamiento Hydra Glow, Compra Gasas)")
-        monto = st.number_input("Monto ($)", min_value=0.0, step=0.50, value=20.0)
+        concepto = st.text_input("Concepto (Ej: Cobro Tratamiento Hydra Glow)")
+        monto_total = st.number_input("Monto Total Cobrado ($)", min_value=0.0, step=0.50, value=35.0)
       with col2:
         metodo = st.selectbox("Método de Pago", ["Efectivo", "Binance USDT", "Zinli", "Pago Móvil / Transferencia", "Otro"])
         cat = st.selectbox("Categoría", ["Servicio Estético", "Venta Producto", "Compra Insumos", "Operativo / Alquiler", "Otro"])
 
+      st.markdown("---")
+      st.markdown("### 🧮 Distribución Inteligente del Ingreso (Opcional si es Serv. Estético)")
+      col_d1, col_d2 = st.columns(2)
+      with col_d1:
+        porcentaje_sueldo = st.slider("Porcentaje para tu Sueldo (%)", 0, 100, 60)
+      with col_d2:
+        porcentaje_repo = st.slider("Porcentaje para Fondo de Reposición (%)", 0, 100, 40)
+
+      # Calculamos montos automáticos
+      sueldo_calculado = monto_total * (porcentaje_sueldo / 100) if tipo_mov == "Ingreso" else 0.0
+      repo_calculado = monto_total * (porcentaje_repo / 100) if tipo_mov == "Ingreso" else 0.0
+
+      if tipo_mov == "Ingreso":
+        st.info(f"💡 De los ${monto_total:.2f}: **${sueldo_calculado:.2f}** van para tu sueldo y **${repo_calculado:.2f}** van para reposición de materiales.")
+
       obs_f = st.text_area("Notas adicionales")
-      if st.form_submit_button("Guardar Movimiento"):
-        if concepto and monto > 0:
+      if st.form_submit_button("Guardar en Caja"):
+        if concepto and monto_total > 0:
           ws_finanzas.append_row([
               str(datetime.now().strftime("%Y-%m-%d %H:%M")),
-              tipo_mov, concepto, float(monto), metodo, cat, obs_f
+              tipo_mov, concepto, float(monto_total), 
+              float(sueldo_calculado), float(repo_calculado),
+              metodo, cat, obs_f
           ])
-          st.success(f"¡Movimiento de tipo '{tipo_mov}' registrado por ${monto:.2f}!")
+          st.success(f"¡Registrado con éxito en Finanzas!")
         else:
           st.warning("Completa el concepto y un monto válido.")
 
   with tab2:
-    st.subheader("📊 Historial de Ingresos y Egresos")
+    st.subheader("📊 Análisis de Ganancias, Sueldos y Reposición")
     try:
       data_f = ws_finanzas.get_all_records()
       if data_f:
         df_f = pd.DataFrame(data_f)
-        ing = df_f[df_f["Tipo"] == "Ingreso"]["Monto"].astype(float).sum() if "Monto" in df_f.columns else 0
-        gas = df_f[df_f["Tipo"] == "Gasto"]["Monto"].astype(float).sum() if "Monto" in df_f.columns else 0
-        bal = ing - gas
+        ing_tot = df_f[df_f["Tipo"] == "Ingreso"]["Monto"].astype(float).sum() if "Monto" in df_f.columns else 0
+        gas_tot = df_f[df_f["Tipo"] == "Gasto"]["Monto"].astype(float).sum() if "Monto" in df_f.columns else 0
+        sueldo_tot = df_f["SueldoCosmiatra"].astype(float).sum() if "SueldoCosmiatra" in df_f.columns else 0
+        repo_tot = df_f["FondoReposicion"].astype(float).sum() if "FondoReposicion" in df_f.columns else 0
 
-        col_m1, col_m2, col_m3 = st.columns(3)
-        col_m1.metric("💰 Total Ingresos", f"${ing:.2f}")
-        col_m2.metric("📉 Total Egresos", f"${gas:.2f}")
-        col_m3.metric("✨ Balance Neto", f"${bal:.2f}")
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        col_m1.metric("💰 Ingresos Totales", f"${ing_tot:.2f}")
+        col_m2.metric("👩‍⚕️ Sueldo Acumulado", f"${sueldo_tot:.2f}")
+        col_m3.metric("📦 Fondo Reposición", f"${repo_tot:.2f}")
+        col_m4.metric("📉 Gastos / Egresos", f"${gas_tot:.2f}")
         st.divider()
 
         st.dataframe(df_f, use_container_width=True)
