@@ -1,548 +1,508 @@
+import sqlite3
 from datetime import datetime
-import gspread
-from google.oauth2.service_account import Credentials
 import pandas as pd
-import requests
 import streamlit as st
 
-# Configuración de la página
+# ==========================================
+# CONFIGURACIÓN DE LA BASE DE DATOS SQLITE
+# ==========================================
+DB_NAME = "cabina_estetica.db"
+
+
+def init_db():
+  conn = sqlite3.connect(DB_NAME)
+  cursor = conn.cursor()
+
+  # Tabla de Clientes y Ficha Clínica
+  cursor.execute("""
+        CREATE TABLE IF NOT EXISTS clientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre_completo TEXT NOT NULL,
+            cedula TEXT UNIQUE NOT NULL,
+            fecha_nacimiento TEXT,
+            telefono TEXT,
+            email TEXT,
+            ocupacion TEXT,
+            tipo_piel TEXT,
+            fototipo TEXT,
+            alergias TEXT,
+            embarazo_lactancia TEXT,
+            antecedentes_medicos TEXT,
+            fecha_registro TEXT
+        )
+    """)
+
+  # Tabla de Citas / Agenda
+  cursor.execute("""
+        CREATE TABLE IF NOT EXISTS citas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cedula_cliente TEXT,
+            servicio TEXT,
+            fecha TEXT,
+            hora TEXT,
+            estado TEXT,
+            notas TEXT,
+            FOREIGN KEY(cedula_cliente) REFERENCES clientes(cedula)
+        )
+    """)
+
+  # Tabla de Inventario
+  cursor.execute("""
+        CREATE TABLE IF NOT EXISTS inventario (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre_producto TEXT NOT NULL,
+            categoria TEXT,
+            stock_actual REAL,
+            unidad_medida TEXT,
+            stock_minimo REAL,
+            costo_unitario REAL,
+            vencimiento TEXT
+        )
+    """)
+
+  # Tabla de Finanzas / Caja
+  cursor.execute("""
+        CREATE TABLE IF NOT EXISTS transacciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora TEXT,
+            cedula_cliente TEXT,
+            tipo_concepto TEXT,
+            descripcion TEXT,
+            monto_total REAL,
+            metodo_pago TEXT
+        )
+    """)
+
+  conn.commit()
+  conn.close()
+
+
+init_db()
+
+# ==========================================
+# INTERFAZ DE USUARIO CON STREAMLIT
+# ==========================================
 st.set_page_config(
-    page_title="Nay López Skincare - Sistema Inteligente",
+    page_title="Nay López Skincare - Sistema de Cabina",
     page_icon="✨",
     layout="wide",
 )
 
-
-# ============================================
-# CONEXIÓN SEGURA CON GOOGLE SHEETS
-# ============================================
-def conectar_google_sheets():
-  scope = [
-      "https://www.googleapis.com/auth/spreadsheets",
-      "https://www.googleapis.com/auth/drive",
-  ]
-  creds_dict = dict(st.secrets["gcp_service_account"])
-  creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-  client = gspread.authorize(creds)
-  sheet = client.open("NayLopez_Cabina_DB").sheet1
-  return sheet
-
-
-# ============================================
-# TASA OFICIAL BCV AUTOMÁTICA EN TIEMPO REAL
-# ============================================
-@st.cache_data(ttl=3600)  # Se actualiza automáticamente cada hora
-def obtener_tasa_bcv():
-  try:
-    # Consulta conectada a referencias oficiales del BCV en Venezuela
-    url = "https://pydolarvenezuela-api.vercel.app/api/v1/dollar/bcv"
-    response = requests.get(url, timeout=5)
-    if response.status_code == 200:
-      data = response.json()
-      tasa = data.get("monsters", {}).get("usd", {}).get("price", 0.0)
-      if tasa > 0:
-        return float(tasa)
-  except Exception:
-    pass
-  return 36.50  # Valor de respaldo institucional
-
-
-tasa_bcv_hoy = obtener_tasa_bcv()
-
-# Asegurar la conexión y creación automática de pestañas en Google Sheets
-try:
-  sh = conectar_google_sheets().spreadsheet
-  ws_clientes = sh.worksheet("Clientes")
-  ws_inventario = sh.worksheet("Inventario")
-  ws_finanzas = sh.worksheet("Finanzas")
-  ws_citas = sh.worksheet("Citas")
-except Exception:
-  sh = conectar_google_sheets().spreadsheet
-  ws_clientes = sh.add_worksheet(title="Clientes", rows="100", cols="20")
-  ws_inventario = sh.add_worksheet(title="Inventario", rows="100", cols="20")
-  ws_finanzas = sh.add_worksheet(title="Finanzas", rows="100", cols="20")
-  ws_citas = sh.add_worksheet(title="Citas", rows="100", cols="20")
-
-# ============================================
-# BARRA LATERAL Y NAVEGACIÓN
-# ============================================
 st.sidebar.title("✨ Nay López Skincare")
-st.sidebar.markdown("Sistema CRM & Protocolos Cosmiátricos")
-st.sidebar.markdown(
-    f"💱 **Tasa BCV del Día:** Bs. {tasa_bcv_hoy:,.2f}\n*(Actualizada"
-    " automáticamente)*"
-)
-st.sidebar.markdown("---")
+st.sidebar.subheader("Sistema Operativo de Cabina")
 
 menu = st.sidebar.selectbox(
-    "Selecciona un Módulo",
-    [
-        "📊 Dashboard / Resumen",
-        "👩‍⚕️ CRM & Ficha Clínica",
-        "⚡ Motor de Protocolos Automáticos",
-        "📦 Inventario y Costos (mL/g)",
-        "💰 Caja & Finanzas (Dólares/Bs)",
-        "📅 Agenda de Citas",
-    ],
+    "Navegación", [
+        "🏠 Inicio / Dashboard",
+        "👥 Clientes y Ficha Clínica",
+        "📅 Agenda y Citas",
+        "📦 Inventario de Insumos",
+        "💰 Caja y Finanzas",
+    ]
 )
 
-# ============================================
-# MÓDULO 1: DASHBOARD / RESUMEN
-# ============================================
-if menu == "📊 Dashboard / Resumen":
-  st.title("Panel de Control - Nay López Skincare")
-  st.markdown("### ¡Bienvenida a tu estudio estético inteligente! 💜")
-
-  try:
-    total_pacientes = len(ws_clientes.get_all_records())
-  except:
-    total_pacientes = 0
-
-  try:
-    total_inventario = len(ws_inventario.get_all_records())
-  except:
-    total_inventario = 0
-
-  try:
-    finanzas_data = ws_finanzas.get_all_records()
-    ingresos_usd = (
-        sum(
-            [
-                float(x.get("MontoUSD", 0))
-                for x in finanzas_data
-                if x.get("Tipo") == "Ingreso"
-            ]
-        )
-        if finanzas_data
-        else 0.0
-    )
-  except:
-    ingresos_usd = 0.0
-
-  ingresos_bs = ingresos_usd * tasa_bcv_hoy
-
-  col1, col2, col3, col4 = st.columns(4)
-  col1.metric("👥 Total Pacientes", total_pacientes)
-  col2.metric("📦 Productos / Activos", total_inventario)
-  col3.metric(
-      "💰 Ingresos (USD)",
-      f"${ingresos_usd:.2f}",
-      f"Bs. {ingresos_bs:,.2f}",
+# ------------------------------------------
+# 1. DASHBOARD INICIAL
+# ------------------------------------------
+if menu == "🏠 Inicio / Dashboard":
+  st.title("Panel de Control General")
+  st.markdown(
+      "Bienvenida a tu sistema operativo de cabina. Aquí tienes un resumen"
+      " rápido del estado de tu estudio."
   )
-  col4.metric("📊 Tasa BCV", f"Bs. {tasa_bcv_hoy:,.2f}")
+
+  conn = sqlite3.connect(DB_NAME)
+  df_clientes = pd.read_sql_query("SELECT * FROM clientes", conn)
+  df_citas = pd.read_sql_query(
+      "SELECT * FROM citas WHERE estado = 'Agendada' OR estado = 'Confirmada'",
+      conn,
+  )
+  df_inventario = pd.read_sql_query("SELECT * FROM inventario", conn)
+  conn.close()
+
+  col1, col2, col3 = st.columns(3)
+  with col1:
+    st.metric("Total Pacientes Registrados", len(df_clientes))
+  with col2:
+    st.metric("Citas Pendientes", len(df_citas))
+  with col3:
+    if not df_inventario.empty:
+      criticos = len(
+          df_inventario[
+              df_inventario["stock_actual"] <= df_inventario["stock_minimo"]
+          ]
+      )
+      st.metric("Insumos en Stock Crítico ⚠️", criticos)
+    else:
+      st.metric("Insumos en Stock Crítico ⚠️", 0)
 
   st.divider()
-  st.info(
-      "💡 **Consejo:** Utiliza el **Motor de Protocolos Automáticos** para"
-      " diseñar los tratamientos de tus pacientes cruzando sus lesiones con"
-      " tu inventario de activos y aparatología de forma instantánea."
-  )
+  st.subheader("⚠️ Alertas Rápidas de Inventario")
+  if not df_inventario.empty:
+    bajos = df_inventario[
+        df_inventario["stock_actual"] <= df_inventario["stock_minimo"]
+    ]
+    if not bajos.empty:
+      st.warning(
+          "Los siguientes productos están por debajo del stock mínimo recomendado:"
+      )
+      st.dataframe(
+          bajos[[
+              "nombre_producto",
+              "categoria",
+              "stock_actual",
+              "unidad_medida",
+              "stock_minimo",
+          ]]
+      )
+    else:
+      st.success("¡Todo el inventario se encuentra en niveles óptimos!")
+  else:
+    st.info(
+        "No hay productos registrados en el inventario todavía. Ve al módulo"
+        " correspondiente para agregarlos."
+    )
 
-# ============================================
-# MÓDULO 2: CRM & FICHA CLÍNICA
-# ============================================
-elif menu == "👩‍⚕️ CRM & Ficha Clínica":
-  st.title("CRM y Gestión de Historias Clínicas")
-  st.markdown("Registro detallado de antecedentes, evaluación y lesiones a tratar.")
+# ------------------------------------------
+# 2. CLIENTES Y FICHA CLÍNICA
+# ------------------------------------------
+elif menu == "👥 Clientes y Ficha Clínica":
+  st.title("Gestión de Pacientes y Ficha Estética")
 
-  tab1, tab2 = st.tabs(["Registrar Nueva Paciente", "Consultar Base de Datos"])
+  tab1, tab2 = st.tabs(["Registrar Nuevo Paciente", "Consultar Fichas"])
 
   with tab1:
-    with st.form("form_crm", clear_on_submit=True):
+    st.subheader("Nueva Ficha Clínica")
+    with st.form("form_cliente"):
       col1, col2 = st.columns(2)
       with col1:
-        nombre = st.text_input("Nombre y Apellido")
-        cedula = st.text_input("Cédula de Identidad")
-        telefono = st.text_input("Número de Contacto / WhatsApp")
+        nombre = st.text_input("Nombre Completo")
+        cedula = st.text_input("Cédula de Identidad (Única)")
+        fnac = st.date_input("Fecha de Nacimiento")
+        telefono = st.text_input("Teléfono / WhatsApp")
+      with col2:
         email = st.text_input("Correo Electrónico")
         ocupacion = st.text_input("Ocupación")
-      with col2:
-        st.markdown("**Tipos de Piel:**")
-        p_eud = st.checkbox("Eudérmica")
-        p_sec = st.checkbox("Seca")
-        p_gra = st.checkbox("Grasa")
-        p_mix = st.checkbox("Mixta")
-        p_ali = st.checkbox("Alipica")
-        p_des = st.checkbox("Deshidratada")
-        p_sen = st.checkbox("Sensible")
-
+        tipo_piel = st.selectbox(
+            "Tipo de Piel",
+            [
+                "Eudérmica",
+                "Seborreica",
+                "Alípica",
+                "Deshidratada",
+                "Mixta",
+            ],
+        )
         fototipo = st.selectbox(
             "Fototipo Cutáneo (Fitzpatrick)",
             ["Tipo I", "Tipo II", "Tipo III", "Tipo IV", "Tipo V", "Tipo VI"],
         )
-        ciclo = st.selectbox(
-            "Ciclo Menstrual",
-            ["Regular", "Irregular", "Amenorrea", "Menopausia", "No aplica"],
-        )
 
       st.markdown("---")
-      st.subheader("🎯 Evaluación y Lesiones a Tratar")
-      lesiones = st.text_area(
-          "¿Qué lesiones o afecciones desea tratar? (Ej: Acné activo, melasma,"
-          " deshidratación, flacidez, líneas de expresión)"
+      st.subheader("Anamnesis y Antecedentes")
+      alergias = st.text_area("Alergias Conocidas (Fármacos, cosméticos, etc.)")
+      embarazo = st.selectbox(
+          "¿Está embarazada o en periodo de lactancia?", ["No", "Sí"]
+      )
+      antecedentes = st.text_area(
+          "Medicamentos actuales / Uso de retinoides en casa"
       )
 
-      col3, col4 = st.columns(2)
-      with col3:
-        enfermedad = st.text_area("¿Padece alguna enfermedad actual?")
-        alergias = st.text_area("Alergias conocidas")
-      with col4:
-        tratamientos_recientes = st.text_area("Tratamientos previos recientes")
-        marcapasos = st.radio("¿Posee marcapasos?", ["No", "Sí"])
-        placa = st.radio("¿Posee placa u otros implantes metálicos?", ["No", "Sí"])
-
-      obs = st.text_area("Observaciones de la Cosmiatra")
-      submit_crm = st.form_submit_button("Guardar Ficha en CRM")
-
-      if submit_crm:
-        if nombre:
-          tipos_str = ", ".join(
-              [
-                  t
-                  for t, cond in [
-                      ("Eudérmica", p_eud),
-                      ("Seca", p_sec),
-                      ("Grasa", p_gra),
-                      ("Mixta", p_mix),
-                      ("Alipica", p_ali),
-                      ("Deshidratada", p_des),
-                      ("Sensible", p_sen),
-                  ]
-                  if cond
-              ]
-          )
-          ws_clientes.append_row([
-              str(datetime.now().strftime("%Y-%m-%d %H:%M")),
-              nombre,
-              cedula,
-              telefono,
-              email,
-              ocupacion,
-              tipos_str,
-              fototipo,
-              ciclo,
-              lesiones,
-              enfermedad,
-              alergias,
-              tratamientos_recientes,
-              marcapasos,
-              placa,
-              obs,
-          ])
-          st.success(f"¡Paciente {nombre} guardada con éxito en el CRM!")
+      submitted = st.form_submit_button("Guardar Paciente y Ficha")
+      if submitted:
+        if nombre and cedula:
+          try:
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                            INSERT INTO clientes (nombre_completo, cedula, fecha_nacimiento, telefono, email, ocupacion, tipo_piel, fototipo, alergias, embarazo_lactancia, antecedentes_medicos, fecha_registro)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                (
+                    nombre,
+                    cedula,
+                    str(fnac),
+                    telefono,
+                    email,
+                    ocupacion,
+                    tipo_piel,
+                    fototipo,
+                    alergias,
+                    embarazo,
+                    antecedentes,
+                    str(datetime.now()),
+                ),
+            )
+            conn.commit()
+            conn.close()
+            st.success(
+                f"¡Paciente {nombre} registrada con éxito en el sistema!"
+            )
+          except sqlite3.IntegrityError:
+            st.error(
+                "Error: Ya existe una paciente registrada con la cédula"
+                f" {cedula}."
+            )
         else:
-          st.warning("Por favor ingresa al menos el nombre y apellido.")
+          st.error("Por favor completa al menos el Nombre y la Cédula.")
 
   with tab2:
-    st.subheader("📂 Base de Datos de Pacientes")
-    try:
-      data = ws_clientes.get_all_records()
-      if data and len(data) > 0:
-        st.dataframe(pd.DataFrame(data), use_container_width=True)
-      else:
-        st.info("Aún no hay pacientes registradas.")
-    except:
-      st.info("Registra tu primera paciente para ver la tabla.")
+    st.subheader("Base de Datos de Pacientes")
+    conn = sqlite3.connect(DB_NAME)
+    df_c = pd.read_sql_query("SELECT * FROM clientes", conn)
+    conn.close()
+    if not df_c.empty:
+      busqueda = st.text_input("Buscar por Nombre o Cédula")
+      if busqueda:
+        df_c = df_c[
+            df_c["nombre_completo"].str.contains(busqueda, case=False, na=False)
+            | df_c["cedula"].str.contains(busqueda, case=False, na=False)
+        ]
+      st.dataframe(df_c)
+    else:
+      st.info("No hay pacientes registrados todavía.")
 
-# ============================================
-# MÓDULO 3: MOTOR DE PROTOCOLOS AUTOMÁTICOS
-# ============================================
-elif menu == "⚡ Motor de Protocolos Automáticos":
-  st.title("Motor Inteligente de Protocolos Estéticos")
-  st.markdown(
-      "El sistema analiza las lesiones de la paciente y diseña el tratamiento,"
-      " calcula sesiones, costos y la rutina domiciliaria."
-  )
+# ------------------------------------------
+# 3. AGENDA Y CITAS
+# ------------------------------------------
+elif menu == "📅 Agenda y Citas":
+  st.title("Agenda y Control de Citas")
 
-  try:
-    pacientes_db = ws_clientes.get_all_records()
-    nombres = [p.get("Nombre", "") for p in pacientes_db if p.get("Nombre")]
-  except:
-    nombres = []
+  col_a, col_b = st.columns(2)
 
-  if nombres:
-    paciente_elegida = st.selectbox("Seleccionar Paciente", nombres)
-    objetivo = st.selectbox(
-        "Objetivo o Lesión Principal a Tratar",
-        [
-            "Limpieza Profunda & Desintoxicación (Hydra Glow Detox)",
-            "Control de Acné Activo y Seborregulación",
-            "Tratamiento de Hiperpigmentación / Manchas",
-            "Rejuvenecimiento Facial con Dermapen",
-        ],
+  with col_a:
+    st.subheader("Agendar Nueva Cita")
+    conn = sqlite3.connect(DB_NAME)
+    df_cli = pd.read_sql_query(
+        "SELECT cedula, nombre_completo FROM clientes", conn
     )
+    conn.close()
 
-    if st.button("Generar Protocolo y Costos Automáticos"):
-      st.success("¡Protocolo generado con éxito basado en el historial!")
-      st.markdown("---")
+    if not df_cli.empty:
+      cliente_dict = dict(
+          zip(df_cli["nombre_completo"], df_cli["cedula"], strict=False)
+      )
+      selected_client_name = st.selectbox(
+          "Seleccionar Paciente", list(cliente_dict.keys())
+      )
+      cedula_asociada = cliente_dict[selected_client_name]
 
-      col_a, col_b = st.columns(2)
-      with col_a:
-        st.subheader("📋 Protocolo de Sesiones en Cabina")
-        if "Hydra Glow" in objetivo:
-          st.markdown("""
-                    * **Sesiones:** 1 sesión inicial (Mantenimiento mensual).
-                    * **Aparatología:** Espátula ultrasónica + Hidrodermoabrasión + Crio-reafirmación.
-                    * **Activos:** Papaina, Ácido Hialurónico, Soluciones hidratantes.
-                    * **Costo Total:** **$35.00** (Bs. """
-                      + f"{35 * tasa_bcv_hoy:,.2f}"
-                      + ")"
-                  )
-        elif "Acné" in objetivo:
-          st.markdown("""
-                    * **Sesiones:** 4 sesiones (1 por semana).
-                    * **Aparatología:** Alta frecuencia + Luz LED Azul + Espátula.
-                    * **Activos:** Papaína, Bromelina, Ácido Mandélico, Niacinamide.
-                    * **Costo Total:** **$120.00** (Bs. """
-                      + f"{120 * tasa_bcv_hoy:,.2f}"
-                      + ")"
-                  )
-        elif "Manchas" in objetivo:
-          st.markdown("""
-                    * **Sesiones:** 5 sesiones (cada 15 días).
-                    * **Aparatología:** Lámpara LED + Espátula ultrasónica.
-                    * **Activos:** Ácido Tranexámico, Vitamina C, Ácido Mandélico.
-                    * **Costo Total:** **$140.00** (Bs. """
-                      + f"{140 * tasa_bcv_hoy:,.2f}"
-                      + ")"
-                  )
-        else:
-          st.markdown("""
-                    * **Sesiones:** 3 sesiones (cada 21 días).
-                    * **Aparatología:** Dermapen (Microneedling) + Luz LED Roja.
-                    * **Activos:** PDRN/DNA líquido, Péptidos, Ácido Hialurónico.
-                    * **Costo Total:** **$150.00** (Bs. """
-                      + f"{150 * tasa_bcv_hoy:,.2f}"
-                      + ")"
-                  )
+      servicio = st.selectbox(
+          "Servicio / Protocolo",
+          [
+              "Hydra Glow Detox",
+              "Limpieza Profunda + Espátula",
+              "Peeling Ácido Mandélico 10%",
+              "Dermapen con PDRN",
+              "Radiofrecuencia Corporal / Maderoterapia",
+          ],
+      )
+      fecha_cita = st.date_input("Fecha de la Cita")
+      hora_cita = st.time_input("Hora de la Cita")
+      estado_cita = st.selectbox(
+          "Estado", ["Agendada", "Confirmada", "Completada", "Cancelada"]
+      )
+      notas_cita = st.text_area("Notas internas")
 
-      with col_b:
-        st.subheader("🏡 Rutina de Cuidado Diario en Casa")
-        st.markdown("""
-                1. **Limpieza AM/PM:** Jabón con Niacinamida.
-                2. **Tratamiento Activo:** Serum de Bakuchiol o Retinol con Ácido Hialurónico.
-                3. **Reparación de Barrera:** Cica Repair Serum.
-                4. **Protección:** Fotoprotector solar obligatorio diario.
-                """)
-  else:
-    st.info(
-        "⚠️ Debes registrar al menos una paciente en el CRM para activar el"
-        " motor de protocolos."
+      if st.button("Programar Cita"):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+                    INSERT INTO citas (cedula_cliente, servicio, fecha, hora, estado, notas)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """,
+            (
+                cedula_asociada,
+                servicio,
+                str(fecha_cita),
+                str(hora_cita),
+                estado_cita,
+                notas_cita,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        st.success("¡Cita agendada correctamente!")
+    else:
+      st.warning(
+          "Primero debes registrar al menos una paciente en la sección de"
+          " Clientes."
+      )
+
+  with col_b:
+    st.subheader("Calendario de Citas Registradas")
+    conn = sqlite3.connect(DB_NAME)
+    df_citas = pd.read_sql_query(
+        """
+            SELECT c.nombre_completo, t.servicio, t.fecha, t.hora, t.estado 
+            FROM citas t 
+            JOIN clientes c ON t.cedula_cliente = c.cedula
+        """,
+        conn,
     )
+    conn.close()
+    if not df_citas.empty:
+      st.dataframe(df_citas)
+    else:
+      st.info("No hay citas programadas.")
 
-# ============================================
-# MÓDULO 4: INVENTARIO Y COSTOS (mL/g)
-# ============================================
-elif menu == "📦 Inventario y Costos (mL/g)":
-  st.title("Control de Inventario y Costos por mL/g")
-  st.markdown(
-      "Calcula automáticamente el costo por mililitro o gramo de tus cosméticos"
-      " y activos."
-  )
+# ------------------------------------------
+# 4. INVENTARIO DE INSUMOS
+# ------------------------------------------
+elif menu == "📦 Inventario de Insumos":
+  st.title("Control de Inventario y Principios Activos")
 
-  tab1, tab2 = st.tabs(["Registrar Producto / Insumo", "Stock y Costos"])
-
-  with tab1:
-    with st.form("form_inv", clear_on_submit=True):
-      col1, col2 = st.columns(2)
-      with col1:
-        prod_nombre = st.text_input("Nombre del Producto / Activo / Equipo")
-        tipo_med = st.selectbox(
-            "Tipo de Medida",
-            [
-                "Líquido / En Crema (ml)",
-                "En Polvo / Sólido (g)",
-                "Unidades (Descartables)",
-            ],
-        )
-      with col2:
-        costo_usd = st.number_input(
-            "Costo Total de Compra ($)", min_value=0.0, step=0.50, value=25.0
-        )
-        if "ml" in tipo_med or "g" in tipo_med:
-          cant_total = st.number_input(
-              "Contenido Total (ml o g)", min_value=1.0, value=250.0
-          )
-        else:
-          cant_total = st.number_input(
-              "Unidades en el Paquete", min_value=1, value=100
-          )
-
-      obs_i = st.text_area("Notas o marca")
-      submit_i = st.form_submit_button("Guardar en Inventario")
-
-      if submit_i:
-        if prod_nombre:
-          costo_unit = costo_usd / cant_total if cant_total > 0 else 0.0
-          costo_bs = costo_unit * tasa_bcv_hoy
-          ws_inventario.append_row([
-              str(datetime.now().strftime("%Y-%m-%d %H:%M")),
-              prod_nombre,
-              tipo_med,
-              float(costo_usd),
-              float(cant_total),
-              round(costo_unit, 4),
-              round(costo_bs, 4),
-              obs_i,
-          ])
-          st.success(
-              f"¡Guardado! Costo por ml/g/unidad: ${costo_unit:.4f} (Bs."
-              f" {costo_bs:.2f})"
-          )
-        else:
-          st.warning("Ingresa el nombre del producto.")
-
-  with tab2:
-    st.subheader("📋 Stock Actual y Costos")
-    try:
-      data_i = ws_inventario.get_all_records()
-      if data_i and len(data_i) > 0:
-        st.dataframe(pd.DataFrame(data_i), use_container_width=True)
-      else:
-        st.info("Inventario vacío.")
-    except:
-      st.info("Agrega un producto para ver la tabla.")
-
-# ============================================
-# MÓDULO 5: CAJA Y FINANZAS (DOBLE MONEDA BCV)
-# ============================================
-elif menu == "💰 Caja & Finanzas (Dólares/Bs)":
-  st.title("Control Financiero y Caja en Doble Moneda")
-  st.markdown(
-      f"💱 Tasa BCV activa: **Bs. {tasa_bcv_hoy:,.2f}** por dólar."
-  )
-
-  tab1, tab2 = st.tabs(["Registrar Movimiento", "Historial y Balance"])
+  tab1, tab2 = st.tabs(["Registrar / Agregar Producto", "Stock Actual"])
 
   with tab1:
-    with st.form("form_f", clear_on_submit=True):
-      col1, col2 = st.columns(2)
-      with col1:
-        tipo_mov = st.selectbox("Tipo", ["Ingreso", "Gasto"])
-        concepto = st.text_input("Concepto (Ej: Tratamiento Hydra Glow)")
-        monto_usd = st.number_input("Monto en Dólares ($)", min_value=0.0, step=0.50, value=20.0)
-      with col2:
-        metodo = st.selectbox(
-            "Método de Pago",
-            [
-                "Efectivo Divisa ($)",
-                "Efectivo Bolívares (Bs)",
-                "Binance USDT",
-                "Zinli",
-                "BNC / Pago Móvil",
-                "Otro",
-            ],
-        )
-        cat = st.selectbox(
-            "Categoría",
-            [
-                "Servicio Estético",
-                "Venta Producto",
-                "Compra Insumos",
-                "Operativo",
-            ],
-        )
+    with st.form("form_inventario"):
+      nombre_prod = st.text_input("Nombre del Insumo / Producto")
+      cat_prod = st.selectbox(
+          "Categoría",
+          [
+              "Ácidos / Peelings",
+              "Ampollas / Serums",
+              "Mascarillas",
+              "Descartables",
+              "Aparatología",
+          ],
+      )
+      stock_act = st.number_input(
+          "Stock Actual", min_value=0.0, format="%.2f"
+      )
+      unidad = st.selectbox(
+          "Unidad de Medida", ["Unidades (un)", "Mililitros (ml)", "Gramos (g)"]
+      )
+      stock_min = st.number_input(
+          "Stock Mínimo de Alerta", min_value=0.0, format="%.2f"
+      )
+      costo = st.number_input(
+          "Costo Unitario ($)", min_value=0.0, format="%.2f"
+      )
+      vencimiento = st.date_input("Fecha de Caducidad (Opcional)")
 
-      monto_bs = monto_usd * tasa_bcv_hoy
-      st.info(f"💡 Equivalente exacto a la tasa del BCV: **Bs. {monto_bs:,.2f}**")
-
-      obs_f = st.text_area("Notas adicionales")
-      submit_f = st.form_submit_button("Guardar en Caja")
-
-      if submit_f:
-        if concepto and monto_usd > 0:
-          ws_finanzas.append_row([
-              str(datetime.now().strftime("%Y-%m-%d %H:%M")),
-              tipo_mov,
-              concepto,
-              float(monto_usd),
-              float(monto_bs),
-              float(tasa_bcv_hoy),
-              metodo,
-              cat,
-              obs_f,
-          ])
-          st.success(f"¡Registrado! ${monto_usd:.2f} (Bs. {monto_bs:,.2f})")
-        else:
-          st.warning("Completa el concepto y un monto válido.")
-
-  with tab2:
-    st.subheader("📊 Historial y Balance Financiero")
-    try:
-      data_f = ws_finanzas.get_all_records()
-      if data_f and len(data_f) > 0:
-        df_f = pd.DataFrame(data_f)
-        ing = (
-            df_f[df_f["Tipo"] == "Ingreso"]["MontoUSD"].astype(float).sum()
-            if "MontoUSD" in df_f.columns
-            else 0
-        )
-        gas = (
-            df_f[df_f["Tipo"] == "Gasto"]["MontoUSD"].astype(float).sum()
-            if "MontoUSD" in df_f.columns
-            else 0
-        )
-        bal = ing - gas
-
-        col_m1, col_m2, col_m3 = st.columns(3)
-        col_m1.metric("💰 Ingresos", f"${ing:.2f}", f"Bs. {ing * tasa_bcv_hoy:,.2f}")
-        col_m2.metric("📉 Gastos", f"${gas:.2f}", f"Bs. {gas * tasa_bcv_hoy:,.2f}")
-        col_m3.metric("✨ Balance", f"${bal:.2f}", f"Bs. {bal * tasa_bcv_hoy:,.2f}")
-        st.divider()
-
-        st.dataframe(df_f, use_container_width=True)
-      else:
-        st.info("Aún no hay movimientos registrados.")
-    except:
-      st.info("Registra un movimiento para ver el balance.")
-
-# ============================================
-# MÓDULO 6: AGENDA DE CITAS
-# ============================================
-elif menu == "📅 Agenda de Citas":
-  st.title("CRM - Agenda y Control de Citas")
-  st.markdown("Organiza las atenciones en tu estudio o en GIA SHOP.")
-
-  tab1, tab2 = st.tabs(["Agendar Nueva Cita", "Ver Calendario de Citas"])
-
-  with tab1:
-    with st.form("form_c", clear_on_submit=True):
-      col1, col2 = st.columns(2)
-      with col1:
-        nom_c = st.text_input("Nombre de la Paciente")
-        fec_c = st.date_input("Fecha de la Cita")
-        hor_c = st.time_input("Hora de la Cita")
-      with col2:
-        trat_c = st.selectbox(
-            "Tratamiento",
-            [
-                "Hydra Glow Detox",
-                "Peeling Enzimático / Químico",
-                "Dermapen",
-                "Tratamiento Corporal",
-            ],
-        )
-        est_c = st.selectbox("Estado", ["Agendada", "Confirmada", "Atendida"])
-
-      notas_c = st.text_area("Observaciones")
-      submit_c = st.form_submit_button("Agendar Cita")
-
-      if submit_c:
-        if nom_c:
-          ws_citas.append_row(
-              [str(fec_c), str(hor_c), nom_c, trat_c, est_c, notas_c]
+      submitted_inv = st.form_submit_button("Guardar en Inventario")
+      if submitted_inv:
+        if nombre_prod:
+          conn = sqlite3.connect(DB_NAME)
+          cursor = conn.cursor()
+          cursor.execute(
+              """
+                        INSERT INTO inventario (nombre_producto, categoria, stock_actual, unidad_medida, stock_minimo, costo_unitario, vencimiento)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+              (
+                  nombre_prod,
+                  cat_prod,
+                  stock_act,
+                  unidad,
+                  stock_min,
+                  costo,
+                  str(vencimiento),
+              ),
           )
-          st.success(f"¡Cita agendada para {nom_c} el {fec_c}!")
+          conn.commit()
+          conn.close()
+          st.success(f"Producto '{nombre_prod}' registrado con éxito.")
         else:
-          st.warning("Ingresa el nombre de la paciente.")
+          st.error("El nombre del producto es obligatorio.")
 
   with tab2:
-    st.subheader("📅 Listado de Citas")
-    try:
-      data_c = ws_citas.get_all_records()
-      if data_c and len(data_c) > 0:
-        st.dataframe(pd.DataFrame(data_c), use_container_width=True)
-      else:
-        st.info("No hay citas registradas.")
-    except:
-      st.info("Agrega tu primera cita.")
+    conn = sqlite3.connect(DB_NAME)
+    df_inv = pd.read_sql_query("SELECT * FROM inventario", conn)
+    conn.close()
+    if not df_inv.empty:
+      st.dataframe(df_inv)
+    else:
+      st.info("El inventario está vacío.")
+
+# ------------------------------------------
+# 5. CAJA Y FINANZAS
+# ------------------------------------------
+elif menu == "💰 Caja y Finanzas":
+  st.title("Control Financiero y Caja")
+
+  col1, col2 = st.columns(2)
+
+  with col1:
+    st.subheader("Registrar Ingreso / Pago")
+    conn = sqlite3.connect(DB_NAME)
+    df_cli = pd.read_sql_query(
+        "SELECT cedula, nombre_completo FROM clientes", conn
+    )
+    conn.close()
+
+    if not df_cli.empty:
+      cliente_dict = dict(
+          zip(df_cli["nombre_completo"], df_cli["cedula"], strict=False)
+      )
+      client_name = st.selectbox(
+          "Paciente", list(cliente_dict.keys()), key="pago_cliente"
+      )
+      cedula_pago = cliente_dict[client_name]
+
+      concepto = st.selectbox(
+          "Concepto", ["Servicio de Cabina", "Venta de Producto / Home Care"]
+      )
+      descripcion_pago = st.text_input("Detalle (Ej. Hydra Glow Detox)")
+      monto = st.number_input("Monto Total ($)", min_value=0.0, format="%.2f")
+      metodo = st.selectbox(
+          "Método de Pago",
+          [
+              "Efectivo Divisas",
+              "Pago Móvil (VES)",
+              "USDT / Binance Pay",
+              "Efectivo Bolívares",
+          ],
+      )
+
+      if st.button("Registrar Transacción"):
+        if monto > 0:
+          conn = sqlite3.connect(DB_NAME)
+          cursor = conn.cursor()
+          cursor.execute(
+              """
+                        INSERT INTO transacciones (fecha_hora, cedula_cliente, tipo_concepto, descripcion, monto_total, metodo_pago)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+              (
+                  str(datetime.now()),
+                  cedula_pago,
+                  concepto,
+                  descripcion_pago,
+                  monto,
+                  metodo,
+              ),
+          )
+          conn.commit()
+          conn.close()
+          st.success("¡Transacción registrada y sumada a caja exitosamente!")
+        else:
+          st.error("El monto debe ser mayor a cero.")
+    else:
+      st.warning("Registra una paciente antes de procesar transacciones.")
+
+  with col2:
+    st.subheader("Resumen y Cierre de Caja")
+    conn = sqlite3.connect(DB_NAME)
+    df_trans = pd.read_sql_query("SELECT * FROM transacciones", conn)
+    conn.close()
+
+    if not df_trans.empty:
+      st.dataframe(df_trans[[
+          "fecha_hora",
+          "tipo_concepto",
+          "descripcion",
+          "monto_total",
+          "metodo_pago",
+      ]])
+      total_ingresos = df_trans["monto_total"].sum()
+      st.metric("Ingresos Totales Registrados ($)", f"${total_ingresos:.2f}")
+
+      st.markdown("### Desglose por Método de Pago")
+      desglose = df_trans.groupby("metodo_pago")["monto_total"].sum()
+      st.write(desglose)
+    else:
+      st.info("No hay transacciones registradas.")
