@@ -305,80 +305,95 @@ elif menu == "Inventario / Productos":
   st.title("Control de Inventario y Costos de Cabina")
   st.markdown(
       "Gestiona tus insumos descartables (unidades) y tus cosméticos"
-      " profesionales (mililitros/gramos)."
+      " profesionales (mililitros/gramos) de forma ágil."
   )
 
   tab1, tab2 = st.tabs(["Registrar Producto / Insumo", "Stock y Costos Actuales"])
 
   with tab1:
     st.subheader("📦 Agregar Producto o Insumo a la Cabina")
-
-    col1, col2 = st.columns(2)
-    with col1:
-      prod_nombre = st.text_input(
-          "Nombre del Producto / Activo (Ej: Limpiador, Gasa, Ácido Mandélico)"
-      )
-      tipo_medida = st.selectbox(
-          "Tipo de Inventario",
-          [
-              "Líquido / En Crema (Mililitros - ml)",
-              "En Polvo / Sólido (Gramos - g)",
-              "Unidades (Descartables / Venta)",
-          ],
-      )
-
-    with col2:
-      precio_compra = st.number_input(
-          "Costo Total de Compra ($)", min_value=0.0, step=0.50, value=25.0
-      )
-      
-      # Dependiendo del tipo, pedimos la cantidad total del envase o paquete
-      if "ml" in tipo_medida or "g" in tipo_medida:
-        cantidad_total = st.number_input(
-            "Contenido Total del Envase (ml o g)",
-            min_value=1.0,
-            step=1.0,
-            value=250.0,
-        )
-      else:
-        cantidad_total = st.number_input(
-            "Cantidad de Unidades en el Paquete",
-            min_value=1,
-            step=1,
-            value=100,
-        )
-
-    observaciones_prod = st.text_area(
-        "Notas o marca del producto (Ej: Uso exclusivo para Hydra Glow Detox)"
+    st.info(
+        "💡 Rellena los datos. Al hacer clic en guardar, el formulario se"
+        " limpiará automáticamente para que puedas ingresar el siguiente"
+        " producto."
     )
 
-    if st.button("Guardar e Calcular Costo Unitario"):
-      if prod_nombre:
-        # Calculamos el costo por ml, gramo o unidad automáticamente
-        if cantidad_total > 0:
-          costo_unitario = precio_compra / cantidad_total
-        else:
-          costo_unitario = 0.0
-
-        # Guardamos en la hoja de inventario
-        ws_inventario.append_row([
-            str(datetime.now().strftime("%Y-%m-%d %H:%M")),
-            prod_nombre,
-            tipo_medida,
-            float(precio_compra),
-            float(cantidad_total),
-            round(costo_unitario, 4),  # Costo exacto por ml, g o unidad
-            observaciones_prod,
-        ])
-        st.success(
-            f"¡'{prod_nombre}' registrado con éxito! El costo calculado es de"
-            f" ${costo_unitario:.4f} por {'ml/g' if 'ml' in tipo_medida or 'g' in tipo_medida else 'unidad'}."
+    # Creamos un formulario interactivo que limpia los campos al enviar
+    with st.form("form_inventario", clear_on_submit=True):
+      col1, col2 = st.columns(2)
+      with col1:
+        prod_nombre = st.text_input(
+            "Nombre del Producto / Activo (Ej: Limpiador, Gasa, Ácido Mandélico)"
         )
-      else:
-        st.warning("Por favor ingresa al menos el nombre del producto.")
+        tipo_medida = st.selectbox(
+            "Tipo de Inventario",
+            [
+                "Líquido / En Crema (Mililitros - ml)",
+                "En Polvo / Sólido (Gramos - g)",
+                "Unidades (Descartables / Venta)",
+            ],
+        )
+
+      with col2:
+        precio_compra = st.number_input(
+            "Costo Total de Compra ($)", min_value=0.0, step=0.50, value=25.0
+        )
+        
+        if "ml" in tipo_medida or "g" in tipo_medida:
+          cantidad_total = st.number_input(
+              "Contenido Total del Envase (ml o g)",
+              min_value=1.0,
+              step=1.0,
+              value=250.0,
+          )
+        else:
+          cantidad_total = st.number_input(
+              "Cantidad de Unidades en el Paquete",
+              min_value=1,
+              step=1,
+              value=100,
+          )
+
+      observaciones_prod = st.text_area(
+          "Notas o marca del producto (Ej: Uso exclusivo para Hydra Glow Detox)"
+      )
+
+      # Botón de envío del formulario
+      submit_button = st.form_submit_button(
+          "Guardar y Limpiar para el Siguiente"
+      )
+
+      if submit_button:
+        if prod_nombre:
+          if cantidad_total > 0:
+            costo_unitario = precio_compra / cantidad_total
+          else:
+            costo_unitario = 0.0
+
+          # Guardamos en la hoja de inventario
+          ws_inventario.append_row([
+              str(datetime.now().strftime("%Y-%m-%d %H:%M")),
+              prod_nombre,
+              tipo_medida,
+              float(precio_compra),
+              float(cantidad_total),
+              round(costo_unitario, 4),
+              observaciones_prod,
+          ])
+          st.success(
+              f"¡'{prod_nombre}' registrado con éxito! Costo por"
+              f" {'ml/g' if 'ml' in tipo_medida or 'g' in tipo_medida else 'unidad'}:"
+              f" ${costo_unitario:.4f}"
+          )
+        else:
+          st.warning("Por favor ingresa al menos el nombre del producto.")
 
   with tab2:
     st.subheader("📋 Stock Actual y Costos por Unidad/Mililitro")
+    st.markdown(
+        "Aquí puedes ver en tiempo real todo lo que tienes registrado en tu"
+        " base de datos."
+    )
     try:
       data_inv = ws_inventario.get_all_records()
       if data_inv and len(data_inv) > 0:
