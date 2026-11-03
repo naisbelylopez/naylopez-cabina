@@ -29,21 +29,46 @@ def conectar_google_sheets():
 try:
   sh = conectar_google_sheets().spreadsheet
 
-  # Verificamos y creamos automáticamente las pestañas si no existen
+  # Pestaña de Clientes
   try:
     ws_clientes = sh.worksheet("Clientes")
   except:
     ws_clientes = sh.add_worksheet(title="Clientes", rows="100", cols="20")
+    ws_clientes.append_row([
+        "Fecha",
+        "Nombre",
+        "Teléfono",
+        "Email",
+        "Tipo de Piel",
+        "Fototipo",
+        "Observaciones",
+        "Tratamiento",
+    ])
 
+  # Pestaña de Citas / Agenda (Para las citas del día)
+  try:
+    ws_citas = sh.worksheet("Citas")
+  except:
+    ws_citas = sh.add_worksheet(title="Citas", rows="100", cols="20")
+    ws_citas.append_row(
+        ["FechaCita", "Hora", "Cliente", "Tratamiento", "Estado"]
+    )
+
+  # Pestaña de Inventario
   try:
     ws_inventario = sh.worksheet("Inventario")
   except:
     ws_inventario = sh.add_worksheet(title="Inventario", rows="100", cols="20")
+    ws_inventario.append_row(
+        ["Producto", "Categoria", "Stock", "Costo", "Fecha"]
+    )
 
+  # Pestaña de Finanzas
   try:
     ws_finanzas = sh.worksheet("Finanzas")
   except:
     ws_finanzas = sh.add_worksheet(title="Finanzas", rows="100", cols="20")
+    ws_finanzas.append_row(["Tipo", "Concepto", "Monto", "MetodoPago", "Fecha"])
 
 except Exception as e:
   st.error(
@@ -70,140 +95,99 @@ menu = st.sidebar.selectbox(
     ],
 )
 
+# ============================================
+# MÓDULO 1: DASHBOARD / RESUMEN GENERAL
+# ============================================
 if menu == "Inicio / Dashboard":
   st.title("Panel de Control - Nay López Skincare")
-  st.info(
-      "¡Bienvenida a tu sistema de gestión estética! Desde aquí puedes"
-      " administrar tus pacientes, inventario y finanzas en tiempo real."
+  st.markdown("### ¡Bienvenida a tu cabina estética en la nube! 💜")
+  st.write(
+      "Aquí tienes el resumen general de tu actividad y las pacientes programadas"
+      " para hoy."
   )
+
+  # Obtenemos datos de las hojas de cálculo de forma segura
+  try:
+    clientes_data = ws_clientes.get_all_records()
+    total_clientes = len(clientes_data) if clientes_data else 0
+  except:
+    total_clientes = 0
+
+  try:
+    inventario_data = ws_inventario.get_all_records()
+    total_productos = len(inventario_data) if inventario_data else 0
+  except:
+    total_productos = 0
+
+  try:
+    finanzas_data = ws_finanzas.get_all_records()
+    if finanzas_data:
+      df_fin = pd.DataFrame(finanzas_data)
+      # Filtramos los ingresos para sumarlos
+      ingresos_totales = (
+          df_fin[df_fin["Tipo"] == "Ingreso"]["Monto"].astype(float).sum()
+      )
+    else:
+      ingresos_totales = 0.0
+  except:
+    ingresos_totales = 0.0
+
+  # Citas para hoy
+  fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+  citas_hoy_count = 0
+  citas_hoy_lista = []
+  try:
+    citas_data = ws_citas.get_all_records()
+    if citas_data:
+      for cita in citas_data:
+        # Comparamos si la fecha de la cita coincide con hoy
+        if str(cita.get("FechaCita", "")).startswith(fecha_hoy):
+          citas_hoy_count += 1
+          citas_hoy_lista.append(cita)
+  except:
+    pass
+
+  # Mostramos métricas visuales en columnas (KPIs)
+  col1, col2, col3, col4 = st.columns(4)
+
+  with col1:
+    st.metric(
+        label="📅 Pacientes para Hoy",
+        value=f"{citas_hoy_count} citas",
+        help="Citas agendadas para el día de hoy",
+    )
+  with col2:
+    st.metric(label="👥 Total Pacientes", value=total_clientes)
+  with col3:
+    st.metric(label="📦 Productos en Inventario", value=total_productos)
+  with col4:
+    st.metric(label="💰 Ingresos Registrados", value=f"${ingresos_totales:.2f}")
+
+  st.divider()
+
+  # Sección de pacientes a atender hoy detalladas
+  st.subheader(f"✨ Agenda del Día ({fecha_hoy})")
+  if citas_hoy_count > 0:
+    df_citas_hoy = pd.DataFrame(citas_hoy_lista)
+    st.dataframe(df_citas_hoy, use_container_width=True)
+  else:
+    st.info(
+        "No tienes citas agendadas para el día de hoy. (Puedes ir al módulo de"
+        " Citas y Agenda para programar)."
+    )
 
 elif menu == "Clientes y Ficha Clínica":
   st.title("Gestión de Pacientes y Ficha Estética")
-
-  tab1, tab2 = st.tabs(["Registrar Nuevo Paciente", "Consultar Fichas"])
-
-  with tab1:
-    st.subheader("Registro de Paciente")
-    nombre = st.text_input("Nombre y Apellido")
-    telefono = st.text_input("Teléfono")
-    email = st.text_input("Correo Electrónico")
-    observaciones = st.text_area("Observaciones / Alergias / Tratamientos")
-
-    if st.button("Guardar Paciente"):
-      if nombre:
-        ws_clientes.append_row(
-            [nombre, telefono, email, observaciones, str(datetime.now())]
-        )
-        st.success(f"¡Paciente {nombre} registrada con éxito en Google Sheets!")
-      else:
-        st.warning("Por favor ingresa al menos el nombre del paciente.")
-
-  with tab2:
-    st.subheader("Lista de Pacientes Registradas")
-    try:
-      data = ws_clientes.get_all_records()
-      if data:
-        df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True)
-      else:
-        st.info("Aún no hay pacientes registradas en la hoja.")
-    except Exception as e:
-      st.info("Registra tu primera paciente para visualizar la tabla.")
+  st.info("Módulo en espera. Lo estructuraremos en el siguiente paso.")
 
 elif menu == "Inventario / Productos":
   st.title("Control de Inventario y Activos de Cabina")
-
-  tab1, tab2 = st.tabs(["Registrar Producto / Insumo", "Ver Inventario"])
-
-  with tab1:
-    st.subheader("Agregar Insumo o Producto")
-    prod_nombre = st.text_input("Nombre del Producto / Activo")
-    prod_categoria = st.selectbox(
-        "Categoría",
-        [
-            "Cosmética / Serum",
-            "Insumo Descartable",
-            "Aparatología / Equipo",
-            "Otro",
-        ],
-    )
-    prod_stock = st.number_input(
-        "Cantidad Disponible", min_value=0, step=1, value=1
-    )
-    prod_costo = st.text_input("Costo Unitario / Notas")
-
-    if st.button("Guardar en Inventario"):
-      if prod_nombre:
-        ws_inventario.append_row([
-            prod_nombre,
-            prod_categoria,
-            int(prod_stock),
-            prod_costo,
-            str(datetime.now()),
-        ])
-        st.success(f"¡Producto '{prod_nombre}' registrado en el inventario!")
-      else:
-        st.warning("Por favor ingresa el nombre del producto.")
-
-  with tab2:
-    st.subheader("Stock Actual en Cabina")
-    try:
-      data_inv = ws_inventario.get_all_records()
-      if data_inv:
-        df_inv = pd.DataFrame(data_inv)
-        st.dataframe(df_inv, use_container_width=True)
-      else:
-        st.info("El inventario está vacío actualmente.")
-    except Exception as e:
-      st.info("Agrega tu primer producto para visualizar la tabla.")
+  st.info("Módulo en espera.")
 
 elif menu == "Finanzas / Caja":
   st.title("Control Financiero y Movimientos")
-
-  tab1, tab2 = st.tabs(["Registrar Movimiento", "Historial Financiero"])
-
-  with tab1:
-    st.subheader("Registrar Ingreso o Gasto")
-    tipo_mov = st.selectbox("Tipo de Movimiento", ["Ingreso", "Gasto"])
-    concepto = st.text_input(
-        "Concepto (Ej: Servicio Hydra Glow, Compra de Gasas, etc.)"
-    )
-    monto = st.number_input(
-        "Monto ($ o Moneda Local)", min_value=0.0, step=0.50
-    )
-    metodo_pago = st.selectbox(
-        "Método de Pago", ["Efectivo", "Binance USDT", "Zinli", "BNC / Pago Móvil", "Otro"]
-    )
-
-    if st.button("Guardar Movimiento"):
-      if concepto and monto > 0:
-        ws_finanzas.append_row([
-            tipo_mov,
-            concepto,
-            float(monto),
-            metodo_pago,
-            str(datetime.now()),
-        ])
-        st.success("¡Movimiento financiero registrado con éxito!")
-      else:
-        st.warning("Completa el concepto y un monto válido.")
-
-  with tab2:
-    st.subheader("Resumen de Ingresos y Gastos")
-    try:
-      data_fin = ws_finanzas.get_all_records()
-      if data_fin:
-        df_fin = pd.DataFrame(data_fin)
-        st.dataframe(df_fin, use_container_width=True)
-      else:
-        st.info("No hay movimientos financieros registrados todavía.")
-    except Exception as e:
-      st.info("Registra un movimiento para ver la tabla financiera.")
+  st.info("Módulo en espera.")
 
 elif menu == "Citas y Agenda":
   st.title("Agenda de Citas - Cabina Estética")
-  st.write(
-      "Módulo listo para agendar tus pacientes y organizar tus horarios de"
-      " atención en GIA SHOP o tu estudio."
-  )
-  st.info("Próximamente calendario interactivo de citas.")
+  st.info("Módulo en espera.")
