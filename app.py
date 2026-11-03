@@ -196,17 +196,20 @@ elif menu == "Clientes y Ficha Clínica":
       ocupacion = st.text_input("Ocupación")
 
     with col2:
-      # Selección múltiple para tipo de piel usando multiselect de Streamlit
-      tipo_piel = st.multiselect(
-          "Tipo de Piel (Selección Múltiple)",
-          ["Eudérmica", "Seca", "Grasa", "Mixta", "Alipica", "Deshidratada", "Sensible"],
-      )
-      
+      st.markdown("**Selecciona los Tipos de Piel:**")
+      tp_eudermica = st.checkbox("Eudérmica (Normal)")
+      tp_seca = st.checkbox("Seca")
+      tp_grasa = st.checkbox("Grasa")
+      tp_mixta = st.checkbox("Mixta")
+      tp_alipica = st.checkbox("Alipica")
+      tp_deshidratada = st.checkbox("Deshidratada")
+      tp_sensible = st.checkbox("Sensible")
+
       fototipo = st.selectbox(
           "Fototipo Cutáneo (Fitzpatrick)",
           ["Tipo I", "Tipo II", "Tipo III", "Tipo IV", "Tipo V", "Tipo VI"],
       )
-      
+
       ciclo_menstrual = st.selectbox(
           "¿Cómo es su ciclo menstrual?",
           ["Regular", "Irregular", "Ausente / Amenorrea", "Menopausia", "No aplica"],
@@ -222,16 +225,40 @@ elif menu == "Clientes y Ficha Clínica":
       alergias = st.text_area("Alergias conocidas")
 
     with col4:
-      tratamientos_recientes = st.text_area("Tratamientos estéticos / médicos recientes")
+      tratamientos_recientes = st.text_area(
+          "Tratamientos estéticos / médicos recientes"
+      )
       marcapasos = st.radio("¿Posee marcapasos?", ["No", "Sí"])
-      placa_metalica = st.radio("¿Posee placa u otros implantes metálicos?", ["No", "Sí"])
+      placa_metalica = st.radio(
+          "¿Posee placa u otros implantes metálicos?", ["No", "Sí"]
+      )
 
     observaciones = st.text_area("Observaciones Generales de la Cosmiatra")
 
     if st.button("Guardar Ficha Clínica Completa"):
       if nombre:
-        # Convertimos la lista de tipo de piel en texto separado por comas para guardarlo bien en Google Sheets
-        tipo_piel_str = ", ".join(tipo_piel) if tipo_piel else "No especificado"
+        # Recopilamos en una lista los tipos de piel seleccionados
+        tipos_seleccionados = []
+        if tp_eudermica:
+          tipos_seleccionados.append("Eudérmica")
+        if tp_seca:
+          tipos_seleccionados.append("Seca")
+        if tp_grasa:
+          tipos_seleccionados.append("Grasa")
+        if tp_mixta:
+          tipos_seleccionados.append("Mixta")
+        if tp_alipica:
+          tipos_seleccionados.append("Alipica")
+        if tp_deshidratada:
+          tipos_seleccionados.append("Deshidratada")
+        if tp_sensible:
+          tipos_seleccionados.append("Sensible")
+
+        tipo_piel_str = (
+            ", ".join(tipos_seleccionados)
+            if tipos_seleccionados
+            else "No especificado"
+        )
 
         ws_clientes.append_row([
             str(datetime.now().strftime("%Y-%m-%d %H:%M")),
@@ -251,7 +278,9 @@ elif menu == "Clientes y Ficha Clínica":
             placa_metalica,
             observaciones,
         ])
-        st.success(f"¡Ficha clínica de {nombre} guardada con éxito en Google Sheets!")
+        st.success(
+            f"¡Ficha clínica de {nombre} guardada con éxito en Google Sheets!"
+        )
       else:
         st.warning("Por favor ingresa al menos el nombre y apellido de la paciente.")
 
@@ -263,9 +292,15 @@ elif menu == "Clientes y Ficha Clínica":
         df_clientes = pd.DataFrame(data_clientes)
         st.dataframe(df_clientes, use_container_width=True)
       else:
-        st.info("Aún no hay pacientes registradas. ¡Crea la primera en la pestaña de al lado!")
+        st.info(
+            "Aún no hay pacientes registradas. ¡Crea la primera en la pestaña"
+            " de al lado!"
+        )
     except Exception as e:
-      st.info("Registra tu primera paciente para visualizar la tabla de historias clínicas.")
+      st.info(
+          "Registra tu primera paciente para visualizar la tabla de historias"
+          " clínicas."
+      )
 
 elif menu == "Inventario / Productos":
   st.title("Control de Inventario y Activos de Cabina")
